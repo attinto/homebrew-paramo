@@ -1,6 +1,15 @@
-# Undistracted - Bloqueador de Distracciones para macOS (Rust)
+# PARAMO
 
-Reescritura en Rust del bloqueador de distracciones que modifica `/etc/hosts` para bloquear dominios durante las horas de trabajo.
+PARAMO es un bloqueador de distracciones para macOS escrito en Rust. Modifica `/etc/hosts`, se integra con `launchd`, ofrece una CLI clara y abre una TUI interactiva al ejecutar `paramo` sin argumentos.
+
+## Qué hace
+
+- Bloquea dominios por horario.
+- Permite bloquear y desbloquear manualmente.
+- Gestiona sitios desde CLI y desde la TUI.
+- Guarda el idioma del usuario (`es` por defecto, `en` opcional).
+- Migra una instalación anterior de `undistracted` cuando existe.
+- Se puede distribuir con Homebrew tap.
 
 ## Compilación
 
@@ -8,130 +17,203 @@ Reescritura en Rust del bloqueador de distracciones que modifica `/etc/hosts` pa
 cargo build --release
 ```
 
-El binario compilado estará en `target/release/undistracted`.
+El binario compilado queda en `target/release/paramo`.
 
-## Instalación
+## Instalación manual
 
 ```bash
-sudo ./target/release/undistracted install
+sudo ./target/release/paramo install
 ```
 
-Esto:
-- Copia el binario a `/usr/local/bin/undistracted`
-- Crea `/etc/undistracted/config.toml` con la configuración por defecto
-- Copia el `.plist` a `/Library/LaunchDaemons/`
-- Configura el LaunchDaemon para ejecutarse cada 20 minutos como root
+Esto hace lo siguiente:
 
-## Uso
+- crea `/etc/paramo/config.toml` si no existe
+- migra `/etc/undistracted/config.toml` si detecta una instalación anterior
+- registra `com.paramo.blocker` en `launchd`
+- usa el binario actual para el daemon
 
-### Ver estado actual (sin sudo)
+## Instalación con Homebrew tap
+
+La idea de distribución es:
+
 ```bash
-./target/release/undistracted status
+brew tap attinto/paramo
+brew install attinto/paramo/paramo
 ```
 
-Ejemplo de salida:
-```
-Viernes 14:23 | 🔴 BLOQUEADO | Horario de bloqueo activo
-Próximo cambio: 18:00 (3h 37m desde ahora)
-```
+o directamente:
 
-### Bloquear/Desbloquear manualmente (requiere sudo)
 ```bash
-sudo ./target/release/undistracted block-now
-sudo ./target/release/undistracted unblock-now
+brew install attinto/paramo/paramo
 ```
 
-### Ver configuración
+Después de instalar con Homebrew, hay que registrar el daemon una vez:
+
 ```bash
-./target/release/undistracted config show
+sudo paramo install
+```
+
+Homebrew instala el binario; `paramo install` prepara la parte del sistema (`/etc/paramo` y `launchd`).
+
+## Uso rápido
+
+### Abrir la TUI
+
+```bash
+paramo
+```
+
+Si el terminal es interactivo, `paramo` abre la TUI con el panel principal, el ASCII art de PARAMO y acceso a:
+
+- Inicio
+- Sitios
+- Horario
+- Ajustes
+- Diagnóstico
+
+### Estado actual
+
+```bash
+paramo status
+```
+
+### Bloquear y desbloquear manualmente
+
+```bash
+sudo paramo block
+sudo paramo unblock
+```
+
+### Listar, añadir y quitar sitios
+
+```bash
+paramo site list
+sudo paramo site add youtube.com
+sudo paramo site remove youtube.com
+```
+
+### Ver y cambiar el horario
+
+```bash
+paramo schedule show
+sudo paramo schedule set --start 9 --end 18 --weekends off
+```
+
+### Cambiar el idioma
+
+```bash
+paramo lang show
+paramo lang set en
+paramo lang set es
+```
+
+### Diagnóstico
+
+```bash
+paramo doctor
+```
+
+### Ver la configuración activa
+
+```bash
+paramo config show
 ```
 
 ### Desinstalar
+
 ```bash
-sudo ./target/release/undistracted uninstall
+sudo paramo uninstall
 ```
+
+`paramo uninstall` elimina el daemon y la instalación manual del binario si existe, pero conserva `/etc/paramo/config.toml`.
 
 ## Configuración
 
-Edita `/etc/undistracted/config.toml`:
+La configuración activa vive en:
 
-`config/default.toml` dentro del repo es solo la plantilla embebida para la instalación inicial. Si cambias ese archivo después de instalar, el binario no usará esos cambios hasta que los copies a `/etc/undistracted/config.toml`.
+```text
+/etc/paramo/config.toml
+```
+
+Plantilla por defecto:
 
 ```toml
 [schedule]
-block_start = 9       # Hora de inicio del bloqueo
-block_end = 18        # Hora de fin del bloqueo
-block_weekends = false # Bloquear también sábados y domingos
+start = 9
+end = 18
+block_weekends = false
 
-[domains]
-list = ["tiktok.com", "instagram.com", ...]
+[sites]
+list = ["youtube.com", "instagram.com"]
 
 [logging]
-file = "/var/log/undistracted.log"
+file = "/var/log/paramo.log"
 level = "info"
+
+[daemon]
+interval_seconds = 1200
 ```
 
-## Características principales
+`config/default.toml` en el repo es la plantilla embebida. Una vez instalado, la fuente de verdad es `/etc/paramo/config.toml`.
 
-✅ **Escritura atómica** de `/etc/hosts` — si el proceso es interrumpido, el archivo no queda corrupto
-✅ **Flush DNS automático** tras cada cambio
-✅ **Configuración flexible** en TOML
-✅ **CLI con subcomandos** — fácil de usar y automatizar
-✅ **Tests unitarios** en hosts y scheduler
-✅ **Logging estructurado** con rotación de archivos
-✅ **Instalación automática** vía el propio binario
+## Migración desde Undistracted
 
-## Mejoras respecto a la versión Python
+Si existe una instalación anterior, PARAMO:
 
-| Feature | Python | Rust |
-|---------|--------|------|
-| Escritura atómica | ❌ | ✅ |
-| Flush DNS automático | ❌ Manual | ✅ Automático |
-| Instalación automática | ❌ Manual (launchctl commands) | ✅ `sudo undistracted install` |
-| CLI mejorado | ❌ Solo script | ✅ Subcomandos |
-| Status sin root | ❌ | ✅ |
-| Binario compilado | N/A | ✅ Más difícil de modificar |
-| Configuración flexible | ❌ Hardcoded | ✅ TOML editable |
+- lee `/etc/undistracted/config.toml`
+- puede reutilizar la lista de sitios y el horario
+- avisa desde `paramo doctor`
+- elimina el daemon antiguo al ejecutar `sudo paramo install`
 
-## Logs
+## TUI
 
-Los logs se escriben a `/var/log/undistracted.log` con rotación diaria.
+Atajos principales dentro de la TUI:
 
-## Troubleshooting
+- `Tab` y `Shift+Tab` cambian de pestaña
+- `q` sale
+- `b` bloquea ahora
+- `u` desbloquea ahora
+- `r` refresca el estado
+- en `Sitios`: `a` añade y `d` elimina
+- en `Horario`: cursores cambian los campos
+- en `Ajustes`: izquierda/derecha cambia el idioma
+- en `Diagnóstico`: `g` relanza las comprobaciones
 
-### LaunchDaemon no está activo
-Verifica que el plist esté instalado:
-```bash
-sudo launchctl print system/com.undistracted.blocker
-```
+Si abres `paramo` sin `sudo`, la TUI funciona en modo lectura para las acciones que escriben en `/etc/hosts` o `/etc/paramo/config.toml`.
 
-### Ver logs de ejecución
-```bash
-tail -f /var/log/undistracted.log
-```
+## Diagnóstico
 
-### Firefox sigue mostrando las webs bloqueadas
-Firefox puede saltarse `/etc/hosts` si tiene DNS over HTTPS activo:
-1. Ve a `Settings > Privacy & Security`
-2. Busca `DNS over HTTPS`
-3. Ponlo en `Off`
+`paramo doctor` revisa al menos:
 
-## Arquitectura
+- si existe la configuración activa
+- si hay restos de `undistracted`
+- si el daemon de `launchd` está instalado
+- si hay sitios configurados
+- si el bloque en `/etc/hosts` está duplicado o desincronizado
+- si conviene revisar DNS over HTTPS en el navegador
 
-```
+## Estructura
+
+```text
 src/
-├── main.rs        # CLI con clap + instalación
-├── config.rs      # Configuración con serde+toml
-├── hosts.rs       # Manipulación de /etc/hosts
-├── scheduler.rs   # Lógica de horario
-├── blocker.rs     # Orquestación principal
-└── logging.rs     # Setup de logging
+├── main.rs         # CLI principal y entrada de la app
+├── tui.rs          # Interfaz interactiva de terminal
+├── config.rs       # Configuración del sistema y mutaciones de sitios/horario
+├── preferences.rs  # Preferencias del usuario (idioma)
+├── i18n.rs         # Textos ES/EN
+├── blocker.rs      # Sincronización del bloqueo con /etc/hosts
+├── hosts.rs        # Lectura/escritura y bloque gestionado
+├── scheduler.rs    # Horario y próximo cambio
+├── doctor.rs       # Diagnóstico de instalación y estado
+├── install.rs      # Instalación, migración y launchd
+├── logging.rs      # Logging con fallback limpio a stderr
+└── paths.rs        # Rutas del sistema y del usuario
 
 config/
-└── default.toml   # Configuración por defecto embebida
+└── default.toml
 
 launchd/
-└── com.undistracted.blocker.plist  # Configuración de LaunchDaemon
+└── com.paramo.blocker.plist
 ```
 
 ## Testing
@@ -140,4 +222,26 @@ launchd/
 cargo test
 ```
 
-Tests unitarios en `hosts.rs` y `scheduler.rs` con fechas/tiempos inyectados.
+## Troubleshooting
+
+### Una web sigue entrando
+
+PARAMO usa `/etc/hosts`. Algunos navegadores pueden saltárselo si tienen DNS over HTTPS activo.
+
+En Firefox:
+
+1. `Settings > Privacy & Security`
+2. buscar `DNS over HTTPS`
+3. dejarlo en `Off`
+
+### El daemon no está activo
+
+```bash
+sudo launchctl print system/com.paramo.blocker
+```
+
+### Quiero reinstalar la parte del sistema
+
+```bash
+sudo paramo install
+```

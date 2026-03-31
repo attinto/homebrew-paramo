@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>Label</key>
-	<string>com.undistracted.blocker</string>
+	<string>com.paramo.blocker</string>
 
 	<key>ProgramArguments</key>
 	<array>
-		<string>/usr/local/bin/undistracted</string>
+		<string>/usr/local/bin/paramo</string>
 		<string>run</string>
 	</array>
 
@@ -18,10 +18,10 @@
 	<true/>
 
 	<key>StandardOutPath</key>
-	<string>/tmp/undistracted.out</string>
+	<string>/tmp/paramo.out</string>
 
 	<key>StandardErrorPath</key>
-	<string>/tmp/undistracted.err</string>
+	<string>/tmp/paramo.err</string>
 
 	<key>StartInterval</key>
 	<integer>1200</integer>

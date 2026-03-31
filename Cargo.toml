@@ -1,15 +1,16 @@
 [package]
-name = "undistracted"
+name = "paramo"
 version = "0.1.0"
 edition = "2021"
-description = "Bloqueador de distracciones para macOS"
+description = "Bloqueador de distracciones para macOS con CLI y TUI"
 
 [dependencies]
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
-colored = "2"
+crossterm = "0.29"
 dirs = "5"
+ratatui = "0.29"
 serde = { version = "1", features = ["derive"] }
 tempfile = "3"
 thiserror = "1"

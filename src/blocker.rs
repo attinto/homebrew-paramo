@@ -1,13 +1,14 @@
-use crate::config::Config;
+use crate::config::SystemConfig;
 use crate::hosts;
+use crate::i18n::I18n;
 use crate::scheduler;
 use anyhow::Result;
-use chrono::{Datelike, Local};
+use chrono::{DateTime, Datelike, Local};
 use std::process::Command;
 use tracing::{error, info};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum BlockerAction {
+pub enum SyncAction {
     Blocked,
     Unblocked,
     Updated,
@@ -20,7 +21,16 @@ pub enum BlockState {
     Unblocked,
 }
 
-pub fn run(config: &Config) -> Result<BlockerAction> {
+#[derive(Debug, Clone)]
+pub struct StatusSnapshot {
+    pub now: DateTime<Local>,
+    pub schedule_active: bool,
+    pub hosts_blocked: bool,
+    pub next_transition: Option<DateTime<Local>>,
+    pub site_count: usize,
+}
+
+pub fn run(config: &SystemConfig) -> Result<SyncAction> {
     let now = Local::now();
     let should_block = scheduler::is_block_time(&config.schedule, &now);
 
@@ -30,23 +40,23 @@ pub fn run(config: &Config) -> Result<BlockerAction> {
     let currently_blocked = hosts::is_blocked(&content, &config.hosts.marker);
     let block_section = hosts::build_block_section(
         &config.hosts.marker,
-        &config.domains.list,
+        &config.sites.list,
         &config.hosts.redirect_ips,
     );
 
     let block_is_current = hosts::has_expected_block(
         &content,
         &config.hosts.marker,
-        &config.domains.list,
+        &config.sites.list,
         &config.hosts.redirect_ips,
     )?;
 
     let action = if should_block {
         if !currently_blocked || !block_is_current {
             let action = if currently_blocked {
-                BlockerAction::Updated
+                SyncAction::Updated
             } else {
-                BlockerAction::Blocked
+                SyncAction::Blocked
             };
 
             let mut new_content = if currently_blocked {
@@ -57,136 +67,120 @@ pub fn run(config: &Config) -> Result<BlockerAction> {
 
             new_content = hosts::add_block(&new_content, &block_section);
             hosts::write_hosts_atomic(hosts_path, &new_content)?;
-
             flush_dns();
-
-            info!(
-                "✅ BLOQUEADO — Sitios configurados bloqueados hasta las {}:00h",
-                config.schedule.block_end
-            );
+            info!("Blocking state synced: {:?}", action);
             action
         } else {
-            BlockerAction::AlreadyCorrect(BlockState::Blocked)
+            SyncAction::AlreadyCorrect(BlockState::Blocked)
         }
     } else if currently_blocked {
         let new_content = hosts::remove_block(&content, &config.hosts.marker)?;
         hosts::write_hosts_atomic(hosts_path, &new_content)?;
-
         flush_dns();
-
-        info!(
-            "🔓 DESBLOQUEADO — Sitios configurados disponibles hasta las {}:00h",
-            config.schedule.block_start
-        );
-        BlockerAction::Unblocked
+        info!("Blocking state synced: unblocked");
+        SyncAction::Unblocked
     } else {
-        BlockerAction::AlreadyCorrect(BlockState::Unblocked)
+        SyncAction::AlreadyCorrect(BlockState::Unblocked)
     };
 
     Ok(action)
 }
 
-fn flush_dns() {
-    // Flush macOS DNS cache
-    // If we're already root (which we should be), we don't need sudo inside the command
-    let is_root = unsafe { libc::geteuid() == 0 };
-
-    let cmd = if is_root {
-        "dscacheutil -flushcache && killall -HUP mDNSResponder 2>/dev/null || true"
-    } else {
-        "sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder 2>/dev/null || true"
-    };
-
-    if let Err(e) = Command::new("sh").arg("-c").arg(cmd).output() {
-        error!("Failed to flush DNS: {}", e);
-    }
-}
-
-pub fn block_now(config: &Config) -> Result<()> {
+pub fn block_now(config: &SystemConfig) -> Result<()> {
     let hosts_path = &config.hosts.file;
     let content = hosts::read_hosts(hosts_path)?;
-
     let block_section = hosts::build_block_section(
         &config.hosts.marker,
-        &config.domains.list,
+        &config.sites.list,
         &config.hosts.redirect_ips,
     );
 
     let currently_blocked = hosts::is_blocked(&content, &config.hosts.marker);
-
     let new_content = if currently_blocked {
-        let temp = hosts::remove_block(&content, &config.hosts.marker)?;
-        hosts::add_block(&temp, &block_section)
+        let cleaned = hosts::remove_block(&content, &config.hosts.marker)?;
+        hosts::add_block(&cleaned, &block_section)
     } else {
         hosts::add_block(&content, &block_section)
     };
 
     hosts::write_hosts_atomic(hosts_path, &new_content)?;
     flush_dns();
-    info!("🛑 Bloqueado manualmente");
-
+    info!("Manual block applied");
     Ok(())
 }
 
-pub fn unblock_now(config: &Config) -> Result<()> {
+pub fn unblock_now(config: &SystemConfig) -> Result<()> {
     let hosts_path = &config.hosts.file;
     let content = hosts::read_hosts(hosts_path)?;
-
     let new_content = hosts::remove_block(&content, &config.hosts.marker)?;
     hosts::write_hosts_atomic(hosts_path, &new_content)?;
     flush_dns();
-    info!("🔓 Desbloqueado manualmente");
-
+    info!("Manual block removed");
     Ok(())
 }
 
-pub fn get_status(config: &Config) -> Result<String> {
+pub fn status_snapshot(config: &SystemConfig) -> Result<StatusSnapshot> {
     let now = Local::now();
-    let should_block = scheduler::is_block_time(&config.schedule, &now);
+    let content = hosts::read_hosts(&config.hosts.file)?;
 
-    let hosts_path = &config.hosts.file;
-    let content = hosts::read_hosts(hosts_path)?;
-    let currently_blocked = hosts::is_blocked(&content, &config.hosts.marker);
+    Ok(StatusSnapshot {
+        now,
+        schedule_active: scheduler::is_block_time(&config.schedule, &now),
+        hosts_blocked: hosts::is_blocked(&content, &config.hosts.marker),
+        next_transition: scheduler::next_transition(&config.schedule, &now),
+        site_count: config.sites.list.len(),
+    })
+}
 
-    let next_transition = scheduler::next_transition(&config.schedule, &now);
-
-    let day_name = [
-        "Lunes",
-        "Martes",
-        "Miércoles",
-        "Jueves",
-        "Viernes",
-        "Sábado",
-        "Domingo",
-    ][now.weekday().number_from_monday() as usize - 1];
-
-    let time_str = now.format("%H:%M").to_string();
-    let state_str = if currently_blocked {
-        "🔴 BLOQUEADO"
+pub fn format_status(snapshot: &StatusSnapshot, i18n: I18n) -> String {
+    let state = if snapshot.hosts_blocked {
+        i18n.blocked_label()
     } else {
-        "🟢 DESBLOQUEADO"
+        i18n.unblocked_label()
+    };
+    let schedule = if snapshot.schedule_active {
+        i18n.schedule_active_label()
+    } else {
+        i18n.schedule_inactive_label()
     };
 
     let mut status = format!(
         "{} {} | {} | {}",
-        day_name,
-        time_str,
-        state_str,
-        if should_block {
-            "Horario de bloqueo activo"
-        } else {
-            "Fuera del horario de bloqueo"
-        }
+        i18n.weekday(snapshot.now.weekday()),
+        snapshot.now.format("%H:%M"),
+        state,
+        schedule
     );
 
-    if let Some(next) = next_transition {
-        let time_until = scheduler::format_duration_until(&next, &now);
-        let next_time = next.format("%H:%M").to_string();
+    if let Some(next) = snapshot.next_transition {
         status.push_str(&format!(
-            "\nPróximo cambio: {} ({} desde ahora)",
-            next_time, time_until
+            "\n{}: {} ({} {})",
+            i18n.next_change_label(),
+            next.format("%H:%M"),
+            scheduler::format_duration_until(&next, &snapshot.now),
+            i18n.from_now_label()
         ));
     }
 
-    Ok(status)
+    status.push_str(&format!(
+        "\n{}: {}",
+        i18n.configured_sites_label(),
+        snapshot.site_count
+    ));
+
+    status
+}
+
+fn flush_dns() {
+    let is_root = unsafe { libc::geteuid() == 0 };
+
+    let command = if is_root {
+        "dscacheutil -flushcache && killall -HUP mDNSResponder 2>/dev/null || true"
+    } else {
+        "sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder 2>/dev/null || true"
+    };
+
+    if let Err(error) = Command::new("sh").arg("-c").arg(command).output() {
+        error!("Failed to flush DNS: {}", error);
+    }
 }

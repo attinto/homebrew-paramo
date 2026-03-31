@@ -1,147 +1,233 @@
 mod blocker;
 mod config;
+mod doctor;
 mod hosts;
+mod i18n;
+mod install;
 mod logging;
 mod paths;
+mod preferences;
 mod scheduler;
+mod tui;
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
-use config::Config;
-use tracing::info;
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use config::{SiteMutation, SystemConfig};
+use i18n::{I18n, Language};
+use preferences::UserPreferences;
+use std::io::IsTerminal;
 
 #[derive(Parser)]
-#[command(name = "undistracted")]
-#[command(about = "Bloqueador de distracciones para macOS", long_about = None)]
+#[command(name = "paramo")]
+#[command(version)]
+#[command(about = "PARAMO: bloqueador de distracciones con CLI y TUI")]
 struct Cli {
     #[command(subcommand)]
-    command: Option<Commands>,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
-enum Commands {
-    /// Ejecuta el ciclo de bloqueo (usado por launchd)
+enum Command {
+    #[command(hide = true)]
     Run,
-
-    /// Muestra el estado actual
     Status,
-
-    /// Bloquea inmediatamente (requiere sudo)
-    BlockNow,
-
-    /// Desbloquea inmediatamente (requiere sudo)
-    UnblockNow,
-
-    /// Gestiona la configuración
-    #[command(subcommand)]
-    Config(ConfigCommands),
-
-    /// Instala el LaunchDaemon
+    Block,
+    Unblock,
+    Doctor,
     Install,
-
-    /// Desinstala el LaunchDaemon
     Uninstall,
+    #[command(subcommand)]
+    Site(SiteCommand),
+    #[command(subcommand)]
+    Schedule(ScheduleCommand),
+    #[command(subcommand)]
+    Lang(LanguageCommand),
+    #[command(subcommand)]
+    Config(ConfigCommand),
 }
 
 #[derive(Subcommand)]
-enum ConfigCommands {
-    /// Muestra la configuración actual
-    Show,
+enum SiteCommand {
+    List,
+    Add { site: String },
+    Remove { site: String },
+}
 
-    /// Edita la configuración
-    #[command(arg_required_else_help = true)]
-    Set {
-        /// Clave a modificar (ej: schedule.block_start)
-        key: String,
-        /// Valor nuevo
-        value: String,
-    },
+#[derive(Subcommand)]
+enum ScheduleCommand {
+    Show,
+    Set(ScheduleSetArgs),
+}
+
+#[derive(Args)]
+struct ScheduleSetArgs {
+    #[arg(long)]
+    start: u8,
+    #[arg(long)]
+    end: u8,
+    #[arg(long, value_enum, default_value_t = ToggleOption::Off)]
+    weekends: ToggleOption,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ToggleOption {
+    On,
+    Off,
+}
+
+impl ToggleOption {
+    fn as_bool(self) -> bool {
+        matches!(self, Self::On)
+    }
+}
+
+#[derive(Subcommand)]
+enum LanguageCommand {
+    Show,
+    Set { language: String },
+}
+
+#[derive(Subcommand)]
+enum ConfigCommand {
+    Show,
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
-
-    // Setup logging
-    let config = Config::load().context("Failed to load configuration")?;
+    let mut preferences = UserPreferences::load().context("Failed to load user preferences")?;
+    let mut config = SystemConfig::load().context("Failed to load system configuration")?;
+    let mut i18n = I18n::new(preferences.language);
     let _logging_guard = logging::setup_logging(&config.logging.file, &config.logging.level)
         .context("Failed to setup logging")?;
-
-    // Check if running as root (except for status and config show)
-    let is_root = unsafe { libc::geteuid() == 0 };
+    let cli = Cli::parse();
 
     match cli.command {
-        Some(Commands::Run) => {
-            require_root()?;
-            info!("Running blocker cycle...");
-            let action = blocker::run(&config)?;
-            info!("Action: {:?}", action);
+        Some(Command::Run) => {
+            require_root(i18n)?;
+            let _ = blocker::run(&config)?;
         }
-
-        Some(Commands::Status) => {
-            let status = blocker::get_status(&config)?;
-            println!("{}", status);
+        Some(Command::Status) => {
+            print_status(&config, i18n)?;
         }
-
-        Some(Commands::BlockNow) => {
-            require_root()?;
+        Some(Command::Block) => {
+            require_root(i18n)?;
             blocker::block_now(&config)?;
-            println!("✅ Bloqueado manualmente");
+            println!("{}", i18n.blocked_now());
         }
-
-        Some(Commands::UnblockNow) => {
-            require_root()?;
+        Some(Command::Unblock) => {
+            require_root(i18n)?;
             blocker::unblock_now(&config)?;
-            println!("🔓 Desbloqueado manualmente");
+            println!("{}", i18n.unblocked_now());
         }
-
-        Some(Commands::Config(config_cmd)) => {
-            match config_cmd {
-                ConfigCommands::Show => {
-                    let content = match std::fs::read_to_string(paths::CONFIG_FILE) {
-                        Ok(c) => c,
-                        Err(_) => {
-                            // Show default config
-                            include_str!("../config/default.toml").to_string()
-                        }
-                    };
-                    println!("{}", content);
-                }
-
-                ConfigCommands::Set { key, value } => {
-                    require_root()?;
-                    let mut config = Config::load().context("Failed to load configuration")?;
-                    config
-                        .update_value(&key, &value)
-                        .map_err(|e| anyhow::anyhow!("❌ Error de configuración: {}", e))?;
-
-                    config
-                        .save(std::path::Path::new(paths::CONFIG_FILE))
-                        .context("Failed to save configuration")?;
-
-                    println!("✅ Configuración actualizada: {} = {}", key, value);
-                }
+        Some(Command::Doctor) => {
+            let diagnostics = doctor::run(&config, i18n)?;
+            println!("{}", doctor::render_cli(&diagnostics, i18n));
+        }
+        Some(Command::Install) => {
+            require_root(i18n)?;
+            let summary = install::install(&config, i18n)?;
+            for line in summary.lines {
+                println!("{}", line);
             }
         }
-
-        Some(Commands::Install) => {
-            require_root()?;
-            install_daemon(&config)?;
+        Some(Command::Uninstall) => {
+            require_root(i18n)?;
+            let summary = install::uninstall(i18n)?;
+            for line in summary.lines {
+                println!("{}", line);
+            }
         }
-
-        Some(Commands::Uninstall) => {
-            require_root()?;
-            uninstall_daemon()?;
-        }
-
+        Some(Command::Site(command)) => match command {
+            SiteCommand::List => {
+                if config.sites.list.is_empty() {
+                    println!("{}", i18n.site_empty());
+                } else {
+                    for site in &config.sites.list {
+                        println!("{}", site);
+                    }
+                }
+            }
+            SiteCommand::Add { site } => {
+                require_root(i18n)?;
+                match config.add_site(&site).map_err(anyhow::Error::msg)? {
+                    SiteMutation::Added(site) => {
+                        config.save_active()?;
+                        let _ = blocker::run(&config)?;
+                        println!("{}", i18n.site_added(&site));
+                    }
+                    SiteMutation::AlreadyPresent(site) => {
+                        println!("{}", i18n.site_already_present(&site));
+                    }
+                    _ => {}
+                }
+            }
+            SiteCommand::Remove { site } => {
+                require_root(i18n)?;
+                match config.remove_site(&site).map_err(anyhow::Error::msg)? {
+                    SiteMutation::Removed(site) => {
+                        config.save_active()?;
+                        let _ = blocker::run(&config)?;
+                        println!("{}", i18n.site_removed(&site));
+                    }
+                    SiteMutation::NotFound(site) => {
+                        println!("{}", i18n.site_not_found(&site));
+                    }
+                    _ => {}
+                }
+            }
+        },
+        Some(Command::Schedule(command)) => match command {
+            ScheduleCommand::Show => {
+                println!(
+                    "{}",
+                    i18n.schedule_summary(
+                        config.schedule.start,
+                        config.schedule.end,
+                        config.schedule.block_weekends
+                    )
+                );
+            }
+            ScheduleCommand::Set(args) => {
+                require_root(i18n)?;
+                config
+                    .set_schedule(args.start, args.end, args.weekends.as_bool())
+                    .map_err(anyhow::Error::msg)?;
+                config.save_active()?;
+                let _ = blocker::run(&config)?;
+                println!(
+                    "{}",
+                    i18n.schedule_updated(
+                        config.schedule.start,
+                        config.schedule.end,
+                        config.schedule.block_weekends
+                    )
+                );
+            }
+        },
+        Some(Command::Lang(command)) => match command {
+            LanguageCommand::Show => {
+                println!("{}", i18n.current_language(preferences.language));
+            }
+            LanguageCommand::Set { language } => {
+                let language = Language::parse(&language)
+                    .ok_or_else(|| anyhow::anyhow!(i18n.unsupported_language(&language)))?;
+                preferences.language = language;
+                preferences.save()?;
+                i18n = I18n::new(language);
+                println!("{}", i18n.language_updated(language));
+            }
+        },
+        Some(Command::Config(command)) => match command {
+            ConfigCommand::Show => {
+                let content = std::fs::read_to_string(paths::system_config_file())
+                    .unwrap_or_else(|_| include_str!("../config/default.toml").to_string());
+                println!("{}", content);
+            }
+        },
         None => {
-            // Default: run the blocker cycle if root, otherwise show status
-            if is_root {
-                info!("Running blocker cycle (default)...");
-                let action = blocker::run(&config)?;
-                info!("Action: {:?}", action);
+            if std::io::stdout().is_terminal() {
+                tui::run(&mut config, &mut preferences)?;
             } else {
-                let status = blocker::get_status(&config)?;
-                println!("{}", status);
+                print_status(&config, i18n)?;
             }
         }
     }
@@ -149,97 +235,16 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn require_root() -> Result<()> {
+fn print_status(config: &SystemConfig, i18n: I18n) -> Result<()> {
+    let snapshot = blocker::status_snapshot(config)?;
+    println!("{}", blocker::format_status(&snapshot, i18n));
+    Ok(())
+}
+
+fn require_root(i18n: I18n) -> Result<()> {
     if unsafe { libc::geteuid() != 0 } {
-        anyhow::bail!(
-            "❌ Este comando requiere permisos de administrador.\nEjecútalo con: sudo undistracted"
-        );
+        anyhow::bail!("{}", i18n.requires_root());
     }
-    Ok(())
-}
-
-fn install_daemon(config: &Config) -> Result<()> {
-    println!("📦 Instalando Undistracted...");
-
-    // Get the current binary path
-    let binary_path = std::env::current_exe().context("Failed to get current binary path")?;
-
-    // Create /etc/undistracted if it doesn't exist
-    let config_dir = std::path::Path::new(paths::CONFIG_DIR);
-    if !config_dir.exists() {
-        std::fs::create_dir_all(config_dir).context("Failed to create config directory")?;
-        println!("✅ Created {}", paths::CONFIG_DIR);
-    }
-
-    // Save default config if it doesn't exist
-    let config_file = std::path::Path::new(paths::CONFIG_FILE);
-    if !config_file.exists() {
-        config.save(&config_file).context("Failed to save config")?;
-        std::process::Command::new("chmod")
-            .args(&["644", config_file.to_str().unwrap()])
-            .output()
-            .context("Failed to set config permissions")?;
-        println!("✅ Created default config at {:?}", config_file);
-    }
-
-    // Copy binary to /usr/local/bin
-    let target_path = std::path::Path::new(paths::BINARY_DEST);
-    std::fs::copy(&binary_path, target_path).context("Failed to copy binary")?;
-    std::process::Command::new("chmod")
-        .args(&["755", target_path.to_str().unwrap()])
-        .output()
-        .context("Failed to set binary permissions")?;
-    println!("✅ Installed binary at {:?}", target_path);
-
-    // Copy plist
-    let plist_content = include_str!("../launchd/com.undistracted.blocker.plist");
-    let plist_path = std::path::Path::new(paths::PLIST_DEST);
-
-    std::fs::write(plist_path, plist_content).context("Failed to write plist")?;
-    std::process::Command::new("chown")
-        .args(&["root:wheel", plist_path.to_str().unwrap()])
-        .output()
-        .context("Failed to set plist ownership")?;
-    std::process::Command::new("chmod")
-        .args(&["644", plist_path.to_str().unwrap()])
-        .output()
-        .context("Failed to set plist permissions")?;
-    println!("✅ Installed LaunchDaemon plist");
-
-    // Load the daemon
-    std::process::Command::new("launchctl")
-        .args(&["bootstrap", "system", plist_path.to_str().unwrap()])
-        .output()
-        .context("Failed to bootstrap LaunchDaemon")?;
-
-    println!("✅ LaunchDaemon bootstrapped");
-    println!("✨ Instalación completada. Undistracted está activo.");
-
-    Ok(())
-}
-
-fn uninstall_daemon() -> Result<()> {
-    println!("🗑️  Desinstalando Undistracted...");
-
-    // Unload the daemon
-    let plist_path = paths::PLIST_DEST;
-    if std::path::Path::new(plist_path).exists() {
-        let _ = std::process::Command::new("launchctl")
-            .args(&["bootout", "system", plist_path])
-            .output();
-        println!("✅ LaunchDaemon desactivado");
-
-        std::fs::remove_file(plist_path).context("Failed to remove plist")?;
-        println!("✅ Eliminado plist");
-    }
-
-    // Remove binary
-    if std::path::Path::new(paths::BINARY_DEST).exists() {
-        std::fs::remove_file(paths::BINARY_DEST).context("Failed to remove binary")?;
-        println!("✅ Eliminado binario");
-    }
-
-    println!("✨ Desinstalación completada.");
 
     Ok(())
 }

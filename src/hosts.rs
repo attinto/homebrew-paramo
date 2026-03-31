@@ -25,6 +25,10 @@ pub fn is_blocked(content: &str, marker: &str) -> bool {
     content.contains(marker)
 }
 
+pub fn count_markers(content: &str, marker: &str) -> usize {
+    content.lines().filter(|line| *line == marker).count()
+}
+
 pub fn build_block_section(marker: &str, domains: &[String], redirect_ips: &[String]) -> String {
     let mut lines = vec![marker.to_string()];
 

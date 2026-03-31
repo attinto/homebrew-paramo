@@ -13,13 +13,7 @@ pub fn setup_logging(log_file: &Path, level: &str) -> Result<Option<WorkerGuard>
 
     let (writer, guard) = match try_file_writer(log_file) {
         Some((writer, guard)) => (writer, Some(guard)),
-        None => {
-            eprintln!(
-                "No se pudo abrir {} para logs. Usando stderr.",
-                log_file.display()
-            );
-            (BoxMakeWriter::new(io::stderr), None)
-        }
+        None => (BoxMakeWriter::new(io::stderr), None),
     };
 
     tracing_subscriber::fmt()
