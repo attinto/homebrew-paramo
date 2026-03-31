@@ -1,17 +1,12 @@
 use chrono::Weekday;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Language {
+    #[default]
     Es,
     En,
-}
-
-impl Default for Language {
-    fn default() -> Self {
-        Self::Es
-    }
 }
 
 impl Language {
@@ -87,7 +82,7 @@ impl I18n {
         }
     }
 
-    pub fn from_now_label(self) -> &'static str {
+    pub fn relative_time_label(self) -> &'static str {
         match self.language {
             Language::Es => "desde ahora",
             Language::En => "from now",
@@ -299,6 +294,13 @@ impl I18n {
         }
     }
 
+    pub fn exit_tab(self) -> &'static str {
+        match self.language {
+            Language::Es => "Salir",
+            Language::En => "Exit",
+        }
+    }
+
     pub fn diagnostics_refresh(self) -> &'static str {
         match self.language {
             Language::Es => "Pulsa g para relanzar el diagnóstico.",
@@ -308,19 +310,8 @@ impl I18n {
 
     pub fn tui_hint(self) -> &'static str {
         match self.language {
-            Language::Es => "Tab/cursor para navegar, a para añadir, d para borrar, b/u para bloquear, q para salir",
-            Language::En => "Use Tab/arrows to navigate, a to add, d to delete, b/u to block, q to quit",
-        }
-    }
-
-    pub fn read_only_hint(self) -> &'static str {
-        match self.language {
-            Language::Es => {
-                "Modo lectura: abre PARAMO con sudo para cambiar bloqueo, sitios u horario."
-            }
-            Language::En => {
-                "Read-only mode: open PARAMO with sudo to change blocking, sites, or schedule."
-            }
+            Language::Es => "Tab/cursor para navegar, a para añadir, d para borrar, b/u para bloquear, q para salir o pestaña Salir + Enter",
+            Language::En => "Use Tab/arrows to navigate, a to add, d to delete, b/u to block, q to quit or Exit tab + Enter",
         }
     }
 
@@ -342,27 +333,6 @@ impl I18n {
         match self.language {
             Language::Es => "Idioma",
             Language::En => "Language",
-        }
-    }
-
-    pub fn permissions_label(self) -> &'static str {
-        match self.language {
-            Language::Es => "Permisos",
-            Language::En => "Permissions",
-        }
-    }
-
-    pub fn full_access(self) -> &'static str {
-        match self.language {
-            Language::Es => "Escritura habilitada",
-            Language::En => "Write access enabled",
-        }
-    }
-
-    pub fn read_only(self) -> &'static str {
-        match self.language {
-            Language::Es => "Solo lectura",
-            Language::En => "Read-only",
         }
     }
 
@@ -415,6 +385,55 @@ impl I18n {
         }
     }
 
+    pub fn home_action_exit(self) -> &'static str {
+        match self.language {
+            Language::Es => "Salir  Pestaña Salir + Enter o q",
+            Language::En => "Exit  Exit tab + Enter or q",
+        }
+    }
+
+    pub fn exit_screen_title(self) -> &'static str {
+        match self.language {
+            Language::Es => "Salir de PARAMO",
+            Language::En => "Exit PARAMO",
+        }
+    }
+
+    pub fn exit_screen_body(self) -> &'static str {
+        match self.language {
+            Language::Es => "Pulsa Enter para cerrar la TUI.",
+            Language::En => "Press Enter to close the TUI.",
+        }
+    }
+
+    pub fn exit_screen_hint(self) -> &'static str {
+        match self.language {
+            Language::Es => "También puedes salir en cualquier momento con q.",
+            Language::En => "You can also quit at any time with q.",
+        }
+    }
+
+    pub fn header_nav_hint(self) -> &'static str {
+        match self.language {
+            Language::Es => "Tab  Navegar",
+            Language::En => "Tab  Navigate",
+        }
+    }
+
+    pub fn header_confirm_hint(self) -> &'static str {
+        match self.language {
+            Language::Es => "Enter  Confirmar",
+            Language::En => "Enter  Confirm",
+        }
+    }
+
+    pub fn header_quit_hint(self) -> &'static str {
+        match self.language {
+            Language::Es => "q  Salir",
+            Language::En => "q  Quit",
+        }
+    }
+
     pub fn schedule_controls(self) -> &'static str {
         match self.language {
             Language::Es => {
@@ -445,10 +464,10 @@ impl I18n {
         }
     }
 
-    pub fn homebrew_note(self) -> &'static str {
+    pub fn install_note(self) -> &'static str {
         match self.language {
-            Language::Es => "Instalado con Homebrew: ejecuta `sudo paramo install` una vez para registrar el daemon.",
-            Language::En => "Installed with Homebrew: run `sudo paramo install` once to register the daemon.",
+            Language::Es => "Instalación del sistema: ejecuta `sudo paramo install` para crear `/etc/paramo` y registrar el daemon.",
+            Language::En => "System install: run `sudo paramo install` to create `/etc/paramo` and register the daemon.",
         }
     }
 

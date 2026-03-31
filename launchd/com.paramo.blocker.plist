@@ -7,7 +7,7 @@
 
 	<key>ProgramArguments</key>
 	<array>
-		<string>/usr/local/bin/paramo</string>
+		<string>__PARAMO_BINARY__</string>
 		<string>run</string>
 	</array>
 
@@ -24,7 +24,7 @@
 	<string>/tmp/paramo.err</string>
 
 	<key>StartInterval</key>
-	<integer>1200</integer>
+	<integer>__PARAMO_INTERVAL__</integer>
 
 	<key>UserName</key>
 	<string>root</string>

@@ -21,17 +21,21 @@ use std::io::{self, Stdout};
 use std::time::Duration;
 
 const ASCII_ART: &[&str] = &[
-    "               /\\",
-    "          /\\  /  \\    /\\",
-    "         /  \\/ /\\ \\  /  \\",
-    "        / /\\  /  \\ \\/ /\\ \\",
-    "       /_/  \\/    \\__/  \\_\\",
-    "",
-    "    ____   ___   ____   ___   __  __   ___",
-    "   |  _ \\ / _ \\ |  _ \\ / _ \\ |  \\/  | / _ \\",
-    "   | |_) | | | || |_) | | | || |\\/| || | | |",
-    "   |  __/| |_| ||  _ <| |_| || |  | || |_| |",
-    "   |_|    \\___/ |_| \\_\\\\___/ |_|  |_| \\___/",
+    r"                                   /\",
+    r"                              /\  //\\",
+    r"                       /\    //\\///\\\        /\",
+    r"                      //\\  ///\////\\\\  /\  //\\",
+    r"         /\          /  ^ \/^ ^/^  ^  ^ \/^ \/  ^ \",
+    r"        / ^\    /\  / ^   /  ^/ ^ ^ ^   ^\ ^/  ^^  \",
+    r"       /^   \  / ^\/ ^ ^   ^ / ^  ^    ^  \/ ^   ^  \       *",
+    r"      /  ^ ^ \/^  ^\ ^ ^ ^   ^  ^   ^   ____  ^   ^  \     /|\",
+    r"     / ^ ^  ^ \ ^  _\___________________|  |_____^ ^  \   /||o\",
+    r"    / ^^  ^ ^ ^\  /______________________________\ ^ ^ \ /|o|||\",
+    r"   /  ^  ^^ ^ ^  /________________________________\  ^  /|||||o|\",
+    r"  /^ ^  ^ ^^  ^    ||___|___||||||||||||___|__|||      /||o||||||\",
+    r" / ^   ^   ^    ^  ||___|___||||||||||||___|__|||          | |",
+    r"/ ^ ^ ^  ^  ^  ^   ||||||||||||||||||||||||||||||oooooooooo| |ooooooo",
+    r"ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
 ];
 
 #[derive(Debug, Clone, Copy)]
@@ -41,16 +45,18 @@ enum TabId {
     Schedule,
     Settings,
     Diagnostics,
+    Exit,
 }
 
 impl TabId {
-    fn all() -> [Self; 5] {
+    fn all() -> [Self; 6] {
         [
             Self::Home,
             Self::Sites,
             Self::Schedule,
             Self::Settings,
             Self::Diagnostics,
+            Self::Exit,
         ]
     }
 
@@ -61,6 +67,7 @@ impl TabId {
             Self::Schedule => 2,
             Self::Settings => 3,
             Self::Diagnostics => 4,
+            Self::Exit => 5,
         }
     }
 
@@ -147,7 +154,7 @@ impl Dashboard {
         let outer = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(12),
+                Constraint::Length(18),
                 Constraint::Length(3),
                 Constraint::Min(12),
                 Constraint::Length(3),
@@ -165,38 +172,74 @@ impl Dashboard {
     }
 
     fn render_header(&self, frame: &mut Frame, area: Rect) {
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(paths::APP_DISPLAY_NAME);
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+
+        let sections = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(74), Constraint::Percentage(26)])
+            .split(inner);
+
         let art = ASCII_ART
             .iter()
             .map(|line| {
                 Line::from(Span::styled(
                     *line,
                     Style::default()
-                        .fg(Color::Rgb(180, 214, 170))
+                        .fg(Color::Rgb(177, 214, 166))
                         .add_modifier(Modifier::BOLD),
                 ))
             })
             .collect::<Vec<_>>();
 
         let subtitle = match self.i18n.language() {
-            Language::Es => "Silencio para la montaña mental",
-            Language::En => "Silence for your mental mountain",
+            Language::Es => "Aíslate para construir",
+            Language::En => "Isolate to build",
         };
 
-        let mut text = art;
-        text.push(Line::from(Span::styled(
-            subtitle,
-            Style::default().fg(Color::Rgb(231, 223, 201)),
-        )));
+        let side_text = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                paths::APP_DISPLAY_NAME,
+                Style::default()
+                    .fg(Color::Rgb(241, 203, 126))
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                subtitle,
+                Style::default().fg(Color::Rgb(231, 223, 201)),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                self.i18n.header_nav_hint(),
+                Style::default().fg(Color::Rgb(190, 197, 208)),
+            )),
+            Line::from(Span::styled(
+                self.i18n.header_confirm_hint(),
+                Style::default().fg(Color::Rgb(190, 197, 208)),
+            )),
+            Line::from(Span::styled(
+                self.i18n.header_quit_hint(),
+                Style::default().fg(Color::Rgb(190, 197, 208)),
+            )),
+        ];
 
-        let widget = Paragraph::new(Text::from(text))
-            .alignment(Alignment::Center)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(paths::APP_DISPLAY_NAME),
-            );
-
-        frame.render_widget(widget, area);
+        frame.render_widget(
+            Paragraph::new(Text::from(art))
+                .alignment(Alignment::Left)
+                .wrap(Wrap { trim: false }),
+            sections[0],
+        );
+        frame.render_widget(
+            Paragraph::new(side_text)
+                .alignment(Alignment::Center)
+                .wrap(Wrap { trim: true }),
+            sections[1],
+        );
     }
 
     fn render_tabs(&self, frame: &mut Frame, area: Rect) {
@@ -206,6 +249,7 @@ impl Dashboard {
             self.i18n.schedule_tab(),
             self.i18n.settings_tab(),
             self.i18n.diagnostics_tab(),
+            self.i18n.exit_tab(),
         ]
         .into_iter()
         .map(Line::from)
@@ -232,6 +276,7 @@ impl Dashboard {
             TabId::Schedule => self.render_schedule(frame, area),
             TabId::Settings => self.render_settings(frame, area),
             TabId::Diagnostics => self.render_diagnostics(frame, area),
+            TabId::Exit => self.render_exit(frame, area),
         }
     }
 
@@ -302,17 +347,10 @@ impl Dashboard {
         frame.render_widget(status_panel, columns[0]);
 
         let actions = vec![
-            Line::from(self.i18n.home_actions()),
-            Line::from(""),
             Line::from(self.i18n.home_action_block()),
             Line::from(self.i18n.home_action_unblock()),
             Line::from(self.i18n.home_action_refresh()),
-            Line::from(""),
-            Line::from(if self.is_root {
-                self.i18n.full_access()
-            } else {
-                self.i18n.read_only_hint()
-            }),
+            Line::from(self.i18n.home_action_exit()),
         ];
 
         let actions_panel = Paragraph::new(actions)
@@ -477,12 +515,6 @@ impl Dashboard {
             )),
             Line::from(""),
             Line::from(self.i18n.schedule_controls()),
-            Line::from(""),
-            Line::from(if self.is_root {
-                self.i18n.full_access()
-            } else {
-                self.i18n.read_only_hint()
-            }),
         ])
         .block(
             Block::default()
@@ -510,17 +542,7 @@ impl Dashboard {
                 Language::En => "← → changes the language",
             }),
             Line::from(""),
-            Line::from(format!(
-                "{}: {}",
-                self.i18n.permissions_label(),
-                if self.is_root {
-                    self.i18n.full_access()
-                } else {
-                    self.i18n.read_only()
-                }
-            )),
-            Line::from(""),
-            Line::from(self.i18n.homebrew_note()),
+            Line::from(self.i18n.install_note()),
         ];
 
         frame.render_widget(
@@ -574,9 +596,36 @@ impl Dashboard {
         frame.render_stateful_widget(list, area, &mut self.diagnostics_state);
     }
 
+    fn render_exit(&self, frame: &mut Frame, area: Rect) {
+        let content = vec![
+            Line::from(Span::styled(
+                self.i18n.exit_screen_title(),
+                Style::default()
+                    .fg(Color::Rgb(241, 203, 126))
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(self.i18n.exit_screen_body()),
+            Line::from(self.i18n.exit_screen_hint()),
+        ];
+
+        frame.render_widget(
+            Paragraph::new(content)
+                .alignment(Alignment::Center)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(self.i18n.exit_tab()),
+                )
+                .wrap(Wrap { trim: true }),
+            area,
+        );
+    }
+
     fn render_footer(&self, frame: &mut Frame, area: Rect) {
         let fallback = match self.active_tab {
             TabId::Diagnostics => self.i18n.diagnostics_refresh().to_string(),
+            TabId::Exit => self.i18n.exit_screen_body().to_string(),
             _ => self.i18n.tui_hint().to_string(),
         };
         let message = self.flash_message.clone().unwrap_or(fallback);
@@ -627,22 +676,27 @@ impl Dashboard {
             KeyCode::Char('b') => self.try_block()?,
             KeyCode::Char('u') => self.try_unblock()?,
             KeyCode::Char('r') => self.refresh_status()?,
-            _ => self.handle_tab_key(key)?,
+            _ => return self.handle_tab_key(key),
         }
 
         Ok(false)
     }
 
-    fn handle_tab_key(&mut self, key: KeyEvent) -> Result<()> {
+    fn handle_tab_key(&mut self, key: KeyEvent) -> Result<bool> {
         match self.active_tab {
             TabId::Home => {}
             TabId::Sites => self.handle_sites_key(key)?,
             TabId::Schedule => self.handle_schedule_key(key)?,
             TabId::Settings => self.handle_settings_key(key)?,
             TabId::Diagnostics => self.handle_diagnostics_key(key)?,
+            TabId::Exit => {
+                if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
+                    return Ok(true);
+                }
+            }
         }
 
-        Ok(())
+        Ok(false)
     }
 
     fn handle_sites_key(&mut self, key: KeyEvent) -> Result<()> {

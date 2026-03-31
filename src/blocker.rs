@@ -158,7 +158,7 @@ pub fn format_status(snapshot: &StatusSnapshot, i18n: I18n) -> String {
             i18n.next_change_label(),
             next.format("%H:%M"),
             scheduler::format_duration_until(&next, &snapshot.now),
-            i18n.from_now_label()
+            i18n.relative_time_label()
         ));
     }
 

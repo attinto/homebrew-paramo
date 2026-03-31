@@ -1,6 +1,8 @@
 use crate::paths;
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use tempfile::NamedTempFile;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -16,6 +18,17 @@ pub enum ConfigError {
 }
 
 pub type ConfigResult<T> = Result<T, ConfigError>;
+
+const DEFAULT_CONFIG_TEMPLATE: &str = include_str!("../config/default.toml");
+
+#[derive(Debug, Deserialize)]
+struct EmbeddedSystemConfig {
+    schedule: ScheduleConfig,
+    sites: SitesConfig,
+    hosts: HostsConfig,
+    logging: LoggingConfig,
+    daemon: DaemonConfig,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -40,6 +53,7 @@ pub struct ScheduleConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct SitesConfig {
     pub list: Vec<String>,
 }
@@ -67,37 +81,7 @@ pub struct DaemonConfig {
 
 impl Default for SystemConfig {
     fn default() -> Self {
-        Self {
-            schedule: ScheduleConfig::default(),
-            sites: SitesConfig {
-                list: vec![
-                    "tiktok.com".to_string(),
-                    "m.tiktok.com".to_string(),
-                    "vm.tiktok.com".to_string(),
-                    "api.tiktok.com".to_string(),
-                    "api2.musical.ly".to_string(),
-                    "musical.ly".to_string(),
-                    "instagram.com".to_string(),
-                    "i.instagram.com".to_string(),
-                    "l.instagram.com".to_string(),
-                    "graph.instagram.com".to_string(),
-                    "cdninstagram.com".to_string(),
-                    "pornhub.com".to_string(),
-                    "es.pornhub.com".to_string(),
-                    "xvideos.com".to_string(),
-                    "xnxx.com".to_string(),
-                    "xhamster.com".to_string(),
-                    "redtube.com".to_string(),
-                    "youporn.com".to_string(),
-                    "tube8.com".to_string(),
-                    "spankbang.com".to_string(),
-                    "youtube.com".to_string(),
-                ],
-            },
-            hosts: HostsConfig::default(),
-            logging: LoggingConfig::default(),
-            daemon: DaemonConfig::default(),
-        }
+        Self::embedded_default()
     }
 }
 
@@ -108,12 +92,6 @@ impl Default for ScheduleConfig {
             end: 18,
             block_weekends: false,
         }
-    }
-}
-
-impl Default for SitesConfig {
-    fn default() -> Self {
-        Self { list: Vec::new() }
     }
 }
 
@@ -146,17 +124,42 @@ impl Default for DaemonConfig {
 
 impl SystemConfig {
     pub fn load() -> ConfigResult<Self> {
-        let path = paths::system_config_file();
-        if path.exists() {
-            Self::load_from(&path)
-        } else {
-            let legacy = PathBuf::from(paths::LEGACY_SYSTEM_CONFIG_FILE);
-            if legacy.exists() {
-                Self::load_from(&legacy)
-            } else {
-                Ok(Self::default())
-            }
+        match Self::config_source() {
+            ConfigSource::Active => Self::load_from(&paths::system_config_file()),
+            ConfigSource::Legacy => Self::load_from(Path::new(paths::LEGACY_SYSTEM_CONFIG_FILE)),
+            ConfigSource::EmbeddedDefault => Ok(Self::default()),
         }
+    }
+
+    pub fn config_source() -> ConfigSource {
+        if paths::system_config_file().exists() {
+            ConfigSource::Active
+        } else if Path::new(paths::LEGACY_SYSTEM_CONFIG_FILE).exists() {
+            ConfigSource::Legacy
+        } else {
+            ConfigSource::EmbeddedDefault
+        }
+    }
+
+    pub fn effective_config_path() -> Option<PathBuf> {
+        match Self::config_source() {
+            ConfigSource::Active => Some(paths::system_config_file()),
+            ConfigSource::Legacy => Some(PathBuf::from(paths::LEGACY_SYSTEM_CONFIG_FILE)),
+            ConfigSource::EmbeddedDefault => None,
+        }
+    }
+
+    pub fn load_effective_contents() -> ConfigResult<String> {
+        if let Some(path) = Self::effective_config_path() {
+            Ok(std::fs::read_to_string(path)?)
+        } else {
+            Ok(DEFAULT_CONFIG_TEMPLATE.to_string())
+        }
+    }
+
+    #[cfg(test)]
+    pub fn default_template() -> &'static str {
+        DEFAULT_CONFIG_TEMPLATE
     }
 
     pub fn load_from(path: &Path) -> ConfigResult<Self> {
@@ -178,7 +181,7 @@ impl SystemConfig {
         let normalized = self.normalized();
         normalized.validate()?;
         let content = toml::to_string_pretty(&normalized)?;
-        std::fs::write(path, content)?;
+        write_atomic(path, &content)?;
         Ok(())
     }
 
@@ -250,11 +253,31 @@ impl SystemConfig {
             .collect();
         cloned.sites.list.sort();
         cloned.sites.list.dedup();
-        if cloned.logging.file == PathBuf::from("/var/log/undistracted.log") {
+        if cloned.logging.file == Path::new("/var/log/undistracted.log") {
             cloned.logging.file = PathBuf::from(paths::LOG_FILE);
         }
         cloned
     }
+
+    fn embedded_default() -> Self {
+        let config: EmbeddedSystemConfig =
+            toml::from_str(DEFAULT_CONFIG_TEMPLATE).expect("embedded default config must be valid");
+        Self {
+            schedule: config.schedule,
+            sites: config.sites,
+            hosts: config.hosts,
+            logging: config.logging,
+            daemon: config.daemon,
+        }
+        .normalized()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigSource {
+    Active,
+    Legacy,
+    EmbeddedDefault,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -323,9 +346,19 @@ fn validate_hour(value: u8) -> Result<(), String> {
     }
 }
 
+fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut temp = NamedTempFile::new_in(parent)?;
+    temp.write_all(content.as_bytes())?;
+    temp.flush()?;
+    temp.persist(path).map_err(|error| error.error)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn test_normalize_site_input() {
@@ -363,5 +396,35 @@ mod tests {
             SiteMutation::Removed(_)
         ));
         assert!(config.sites.list.is_empty());
+    }
+
+    #[test]
+    fn test_default_matches_embedded_template() {
+        let dir = tempdir().unwrap();
+        let config_path = dir.path().join("default.toml");
+        std::fs::write(&config_path, SystemConfig::default_template()).unwrap();
+
+        let defaults = SystemConfig::default();
+        let parsed = SystemConfig::load_from(&config_path).unwrap();
+
+        assert_eq!(defaults.sites.list, parsed.sites.list);
+        assert_eq!(defaults.schedule.start, parsed.schedule.start);
+        assert_eq!(
+            defaults.daemon.interval_seconds,
+            parsed.daemon.interval_seconds
+        );
+    }
+
+    #[test]
+    fn test_effective_config_path_uses_active_file_when_present() {
+        let dir = tempdir().unwrap();
+        let config_path = dir.path().join("config.toml");
+        let config = SystemConfig::default();
+        config.save_to(&config_path).unwrap();
+
+        assert_eq!(
+            SystemConfig::load_from(&config_path).unwrap().sites.list,
+            config.sites.list
+        );
     }
 }

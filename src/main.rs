@@ -4,6 +4,7 @@ mod doctor;
 mod hosts;
 mod i18n;
 mod install;
+mod launchd;
 mod logging;
 mod paths;
 mod preferences;
@@ -218,8 +219,7 @@ fn main() -> Result<()> {
         },
         Some(Command::Config(command)) => match command {
             ConfigCommand::Show => {
-                let content = std::fs::read_to_string(paths::system_config_file())
-                    .unwrap_or_else(|_| include_str!("../config/default.toml").to_string());
+                let content = SystemConfig::load_effective_contents()?;
                 println!("{}", content);
             }
         },
