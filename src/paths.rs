@@ -9,6 +9,8 @@ pub const LOG_FILE: &str = "/var/log/paramo.log";
 pub const LAUNCHD_LABEL: &str = "com.paramo.blocker";
 pub const PLIST_DEST: &str = "/Library/LaunchDaemons/com.paramo.blocker.plist";
 
+pub const IPC_SOCKET: &str = "/var/run/paramo.sock";
+
 pub const LEGACY_SYSTEM_CONFIG_FILE: &str = "/etc/undistracted/config.toml";
 pub const LEGACY_LAUNCHD_LABEL: &str = "com.undistracted.blocker";
 pub const LEGACY_PLIST_DEST: &str = "/Library/LaunchDaemons/com.undistracted.blocker.plist";

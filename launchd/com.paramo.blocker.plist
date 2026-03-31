@@ -23,9 +23,6 @@
 	<key>StandardErrorPath</key>
 	<string>/tmp/paramo.err</string>
 
-	<key>StartInterval</key>
-	<integer>__PARAMO_INTERVAL__</integer>
-
 	<key>UserName</key>
 	<string>root</string>
 

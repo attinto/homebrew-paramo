@@ -4,7 +4,6 @@ use std::process::{Command, Output};
 
 const PLIST_TEMPLATE: &str = include_str!("../launchd/com.paramo.blocker.plist");
 const BINARY_PLACEHOLDER: &str = "__PARAMO_BINARY__";
-const INTERVAL_PLACEHOLDER: &str = "__PARAMO_INTERVAL__";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServiceStatus {
@@ -15,13 +14,11 @@ pub struct ServiceStatus {
     pub program: Option<PathBuf>,
 }
 
-pub fn render_plist(binary_path: &Path, interval_seconds: u32) -> String {
-    PLIST_TEMPLATE
-        .replace(
-            BINARY_PLACEHOLDER,
-            &escape_xml(&binary_path.display().to_string()),
-        )
-        .replace(INTERVAL_PLACEHOLDER, &interval_seconds.to_string())
+pub fn render_plist(binary_path: &Path) -> String {
+    PLIST_TEMPLATE.replace(
+        BINARY_PLACEHOLDER,
+        &escape_xml(&binary_path.display().to_string()),
+    )
 }
 
 pub fn query_service(label: &str) -> Result<ServiceStatus> {
@@ -290,16 +287,14 @@ mod tests {
 
     #[test]
     fn test_render_plist_replaces_template_values() {
-        let plist = render_plist(Path::new("/usr/local/bin/paramo"), 900);
+        let plist = render_plist(Path::new("/usr/local/bin/paramo"));
         assert!(plist.contains("<string>/usr/local/bin/paramo</string>"));
-        assert!(plist.contains("<integer>900</integer>"));
         assert!(!plist.contains(BINARY_PLACEHOLDER));
-        assert!(!plist.contains(INTERVAL_PLACEHOLDER));
     }
 
     #[test]
     fn test_program_arguments_are_extracted() {
-        let plist = render_plist(Path::new("/usr/local/bin/paramo"), 900);
+        let plist = render_plist(Path::new("/usr/local/bin/paramo"));
         assert_eq!(
             plist_program_arguments(&plist),
             vec!["/usr/local/bin/paramo".to_string(), "run".to_string()]

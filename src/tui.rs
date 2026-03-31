@@ -2,6 +2,7 @@ use crate::blocker::{self, StatusSnapshot};
 use crate::config::{SiteMutation, SystemConfig};
 use crate::doctor::{self, Diagnostic, DiagnosticLevel};
 use crate::i18n::{I18n, Language};
+use crate::ipc;
 use crate::paths;
 use crate::preferences::UserPreferences;
 use anyhow::Result;
@@ -93,7 +94,6 @@ struct Dashboard {
     sites_state: ListState,
     diagnostics_state: ListState,
     schedule_cursor: usize,
-    is_root: bool,
     flash_message: Option<String>,
     prompt: Option<PromptState>,
 }
@@ -144,7 +144,6 @@ impl Dashboard {
             sites_state,
             diagnostics_state,
             schedule_cursor: 0,
-            is_root: unsafe { libc::geteuid() == 0 },
             flash_message: None,
             prompt: None,
         })
@@ -772,36 +771,30 @@ impl Dashboard {
     }
 
     fn try_block(&mut self) -> Result<()> {
-        if !self.ensure_root() {
-            return Ok(());
+        match ipc::send_command("block") {
+            Ok(r) if r == "ok" => self.set_flash(self.i18n.blocked_now()),
+            Ok(err) => self.set_flash(err),
+            Err(e) => self.set_flash(e),
         }
-
-        blocker::block_now(&self.config)?;
-        self.set_flash(self.i18n.blocked_now());
         self.refresh_status()?;
         Ok(())
     }
 
     fn try_unblock(&mut self) -> Result<()> {
-        if !self.ensure_root() {
-            return Ok(());
+        match ipc::send_command("unblock") {
+            Ok(r) if r == "ok" => self.set_flash(self.i18n.unblocked_now()),
+            Ok(err) => self.set_flash(err),
+            Err(e) => self.set_flash(e),
         }
-
-        blocker::unblock_now(&self.config)?;
-        self.set_flash(self.i18n.unblocked_now());
         self.refresh_status()?;
         Ok(())
     }
 
     fn add_site(&mut self, raw: &str) -> Result<()> {
-        if !self.ensure_root() {
-            return Ok(());
-        }
-
         match self.config.add_site(raw) {
             Ok(SiteMutation::Added(site)) => {
                 self.config.save_active()?;
-                let _ = blocker::run(&self.config)?;
+                let _ = ipc::send_command("sync");
                 self.set_flash(self.i18n.site_added(&site));
                 self.refresh_status()?;
                 self.refresh_diagnostics()?;
@@ -824,10 +817,6 @@ impl Dashboard {
     }
 
     fn remove_selected_site(&mut self) -> Result<()> {
-        if !self.ensure_root() {
-            return Ok(());
-        }
-
         let selected = self
             .sites_state
             .selected()
@@ -842,7 +831,7 @@ impl Dashboard {
         match self.config.remove_site(&site) {
             Ok(SiteMutation::Removed(site)) => {
                 self.config.save_active()?;
-                let _ = blocker::run(&self.config)?;
+                let _ = ipc::send_command("sync");
                 self.set_flash(self.i18n.site_removed(&site));
                 self.refresh_status()?;
                 self.refresh_diagnostics()?;
@@ -862,10 +851,6 @@ impl Dashboard {
     }
 
     fn adjust_schedule(&mut self, delta: i8) -> Result<()> {
-        if !self.ensure_root() {
-            return Ok(());
-        }
-
         let mut start = self.config.schedule.start;
         let mut end = self.config.schedule.end;
         let mut weekends = self.config.schedule.block_weekends;
@@ -883,7 +868,7 @@ impl Dashboard {
         }
 
         self.config.save_active()?;
-        let _ = blocker::run(&self.config)?;
+        let _ = ipc::send_command("sync");
         self.set_flash(self.i18n.schedule_updated(start, end, weekends));
         self.refresh_status()?;
         self.refresh_diagnostics()?;
@@ -920,15 +905,6 @@ impl Dashboard {
 
     fn set_flash(&mut self, message: impl Into<String>) {
         self.flash_message = Some(message.into());
-    }
-
-    fn ensure_root(&mut self) -> bool {
-        if self.is_root {
-            true
-        } else {
-            self.set_flash(self.i18n.requires_root());
-            false
-        }
     }
 
     fn next_tab(&mut self) {

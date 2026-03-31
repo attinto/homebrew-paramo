@@ -50,4 +50,4 @@ level = "info"
 
 [daemon]
 # Intervalo del daemon en segundos
-interval_seconds = 1200
+interval_seconds = 60

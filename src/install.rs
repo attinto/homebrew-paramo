@@ -30,6 +30,7 @@ pub fn install(config: &SystemConfig, i18n: I18n) -> Result<InstallSummary> {
         migrate_or_create_config(config)?,
         i18n,
     ));
+    set_config_owner_to_sudo_user();
     lines.extend(cleanup_legacy_installation(i18n)?);
 
     let active_config = SystemConfig::load_from(&paths::system_config_file())
@@ -37,7 +38,7 @@ pub fn install(config: &SystemConfig, i18n: I18n) -> Result<InstallSummary> {
     let sync_action = blocker::run(&active_config)?;
     lines.push(sync_action_message(sync_action, i18n));
 
-    write_plist(&binary_path, active_config.daemon.interval_seconds)?;
+    write_plist(&binary_path)?;
     lines.push(match i18n.language() {
         Language::Es => format!("LaunchDaemon actualizado: {}", paths::PLIST_DEST),
         Language::En => format!("LaunchDaemon updated: {}", paths::PLIST_DEST),
@@ -235,8 +236,8 @@ fn sync_action_message(action: SyncAction, i18n: I18n) -> String {
     }
 }
 
-fn write_plist(binary_path: &Path, interval_seconds: u32) -> Result<()> {
-    let rendered = launchd::render_plist(binary_path, interval_seconds);
+fn write_plist(binary_path: &Path) -> Result<()> {
+    let rendered = launchd::render_plist(binary_path);
     write_file_atomically(Path::new(paths::PLIST_DEST), rendered.as_bytes(), 0o644)?;
     let status = std::process::Command::new("chown")
         .args(["root:wheel", paths::PLIST_DEST])
@@ -261,6 +262,22 @@ fn write_file_atomically(path: &Path, content: &[u8], mode: u32) -> Result<()> {
         .set_permissions(fs::Permissions::from_mode(mode))?;
     temp.persist(path).map_err(|error| error.error)?;
     Ok(())
+}
+
+fn set_config_owner_to_sudo_user() {
+    let sudo_user = match std::env::var("SUDO_USER") {
+        Ok(user) if !user.is_empty() && user != "root" => user,
+        _ => return,
+    };
+    let _ = std::process::Command::new("chown")
+        .args([&sudo_user, paths::APP_SUPPORT_DIR])
+        .status();
+    let config_file = paths::SYSTEM_CONFIG_FILE;
+    if Path::new(config_file).exists() {
+        let _ = std::process::Command::new("chown")
+            .args([&sudo_user, config_file])
+            .status();
+    }
 }
 
 fn bootstrap_launchd() -> Result<()> {

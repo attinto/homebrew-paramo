@@ -5,6 +5,7 @@ use crate::scheduler;
 use anyhow::Result;
 use chrono::{DateTime, Datelike, Local};
 use std::process::Command;
+use std::time::Duration;
 use tracing::{error, info};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -28,6 +29,16 @@ pub struct StatusSnapshot {
     pub hosts_blocked: bool,
     pub next_transition: Option<DateTime<Local>>,
     pub site_count: usize,
+}
+
+pub fn run_daemon(config: &SystemConfig) -> Result<()> {
+    crate::ipc::listen();
+    let interval = Duration::from_secs(config.daemon.interval_seconds.max(10) as u64);
+    loop {
+        let current = SystemConfig::load().unwrap_or_else(|_| config.clone());
+        let _ = run(&current);
+        std::thread::sleep(interval);
+    }
 }
 
 pub fn run(config: &SystemConfig) -> Result<SyncAction> {
