@@ -1,0 +1,62 @@
+[schedule]
+# Hora de inicio del bloqueo (0-23, formato 24h)
+block_start = 9
+# Hora de fin del bloqueo (0-23, formato 24h)
+block_end = 18
+# Bloquear también sábado y domingo
+block_weekends = false
+
+[domains]
+# Lista de dominios a bloquear
+list = [
+  "tiktok.com",
+  "www.tiktok.com",
+  "m.tiktok.com",
+  "vm.tiktok.com",
+  "api.tiktok.com",
+  "api2.musical.ly",
+  "musical.ly",
+  "www.musical.ly",
+  "instagram.com",
+  "www.instagram.com",
+  "i.instagram.com",
+  "l.instagram.com",
+  "graph.instagram.com",
+  "cdninstagram.com",
+  "www.cdninstagram.com",
+  "pornhub.com",
+  "www.pornhub.com",
+  "es.pornhub.com",
+  "xvideos.com",
+  "www.xvideos.com",
+  "xnxx.com",
+  "www.xnxx.com",
+  "xhamster.com",
+  "www.xhamster.com",
+  "redtube.com",
+  "www.redtube.com",
+  "youporn.com",
+  "www.youporn.com",
+  "tube8.com",
+  "www.tube8.com",
+  "spankbang.com",
+  "www.spankbang.com",
+  # youtube.com se expande en tiempo de ejecución a aliases comunes
+  # como www.youtube.com, m.youtube.com, music.youtube.com y youtu.be
+  "youtube.com",
+  "www.youtube.com"
+]
+
+[hosts]
+# Ruta del archivo /etc/hosts
+file = "/etc/hosts"
+# Marcador para identificar el bloque de undistracted
+marker = "# --- UNDISTRACTED BLOCKER ---"
+# IPs a las que redirigir
+redirect_ips = ["127.0.0.1", "::1"]
+
+[logging]
+# Ruta del archivo de log
+file = "/var/log/undistracted.log"
+# Nivel de logging: debug, info, warn, error
+level = "info"
