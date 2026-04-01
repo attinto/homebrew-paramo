@@ -1,5 +1,6 @@
 use super::helpers::wrap_hour;
 use super::state::{Dashboard, PromptState, TabId, UnblockFlow};
+use crate::attempts;
 use crate::config::SiteMutation;
 use crate::i18n::Language;
 use crate::ipc;
@@ -34,9 +35,12 @@ impl Dashboard {
 
     pub(crate) fn perform_pending_actions(&mut self) -> Result<()> {
         if let Some(reason) = self.pending_unblock.take() {
-            let _ = journal::append(&reason);
+            if journal::append(&reason).is_ok() {
+                let _ = attempts::record_completed();
+            }
             self.streak = streak::load().unwrap_or_default();
             self.wall_entries = journal::load().unwrap_or_default();
+            self.refresh_attempts();
             match ipc::send_command("unblock") {
                 Ok(()) => self.set_flash(self.i18n.unblocked_now()),
                 Err(error) => self.set_flash(error),
@@ -53,6 +57,7 @@ impl Dashboard {
             TabId::Schedule => self.handle_schedule_key(key)?,
             TabId::Settings => self.handle_settings_key(key)?,
             TabId::Diagnostics => self.handle_diagnostics_key(key)?,
+            TabId::Attempts => {}
             TabId::Streak => {}
             TabId::Wall => self.handle_wall_key(key),
             TabId::Exit => {
@@ -214,9 +219,11 @@ impl Dashboard {
 
     fn try_unblock(&mut self) -> Result<()> {
         if self.status.schedule_active {
+            let _ = attempts::record_initiated();
             self.unblock_flow = Some(UnblockFlow::Countdown {
                 started: Instant::now(),
             });
+            self.refresh_attempts();
         } else {
             match ipc::send_command("unblock") {
                 Ok(()) => self.set_flash(self.i18n.unblocked_now()),

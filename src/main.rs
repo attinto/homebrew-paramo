@@ -1,3 +1,4 @@
+mod attempts;
 mod blocker;
 mod config;
 mod doctor;

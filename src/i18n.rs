@@ -156,6 +156,9 @@ impl I18n {
     pub fn diagnostics_tab(self) -> &'static str {
         self.t("diagnostics_tab")
     }
+    pub fn attempts_tab(self) -> &'static str {
+        self.t("attempts_tab")
+    }
     pub fn streak_tab(self) -> &'static str {
         self.t("streak_tab")
     }
@@ -293,6 +296,33 @@ impl I18n {
     }
     pub fn streak_header(self) -> &'static str {
         self.t("streak_header")
+    }
+    pub fn attempts_title(self) -> &'static str {
+        self.t("attempts_title")
+    }
+    pub fn attempts_today(self) -> &'static str {
+        self.t("attempts_today")
+    }
+    pub fn attempts_week(self) -> &'static str {
+        self.t("attempts_week")
+    }
+    pub fn attempts_initiated(self) -> &'static str {
+        self.t("attempts_initiated")
+    }
+    pub fn attempts_resisted(self) -> &'static str {
+        self.t("attempts_resisted")
+    }
+    pub fn attempts_completed(self) -> &'static str {
+        self.t("attempts_completed")
+    }
+    pub fn attempts_last_days(self) -> &'static str {
+        self.t("attempts_last_days")
+    }
+    pub fn attempts_clean_day(self) -> &'static str {
+        self.t("attempts_clean_day")
+    }
+    pub fn attempts_no_attempts(self) -> &'static str {
+        self.t("attempts_no_attempts")
     }
     pub fn countdown_title(self) -> &'static str {
         self.t("countdown_title")

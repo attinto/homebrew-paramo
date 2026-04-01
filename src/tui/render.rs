@@ -1,8 +1,10 @@
 use super::animations::{ASCII_ART, DISTRACTION_PHRASES, WAVE_FRAMES};
 use super::helpers::centered_rect;
 use super::state::{Dashboard, TabId, UnblockFlow};
+use crate::attempts::DayAttempts;
 use crate::doctor::DiagnosticLevel;
 use crate::paths;
+use chrono::Datelike;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
@@ -122,6 +124,7 @@ impl Dashboard {
             self.i18n.schedule_tab(),
             self.i18n.settings_tab(),
             self.i18n.diagnostics_tab(),
+            self.i18n.attempts_tab(),
             self.i18n.streak_tab(),
             self.i18n.wall_tab(),
             self.i18n.exit_tab(),
@@ -151,6 +154,7 @@ impl Dashboard {
             TabId::Schedule => self.render_schedule(frame, area),
             TabId::Settings => self.render_settings(frame, area),
             TabId::Diagnostics => self.render_diagnostics(frame, area),
+            TabId::Attempts => self.render_attempts(frame, area),
             TabId::Streak => self.render_streak(frame, area),
             TabId::Wall => self.render_wall(frame, area),
             TabId::Exit => self.render_exit(frame, area),
@@ -483,6 +487,48 @@ impl Dashboard {
         );
     }
 
+    fn render_attempts(&self, frame: &mut Frame, area: Rect) {
+        let week = self.attempts_last_7_days.iter().fold(
+            DayAttempts {
+                date: self.attempts_today.date,
+                initiated: 0,
+                completed: 0,
+                resisted: 0,
+            },
+            |mut totals, day| {
+                totals.initiated += day.initiated;
+                totals.completed += day.completed;
+                totals.resisted += day.resisted;
+                totals
+            },
+        );
+
+        let mut lines = vec![
+            Line::from(Span::styled(
+                self.i18n.attempts_title(),
+                Style::default()
+                    .fg(Color::Rgb(241, 203, 126))
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from("─────────────────────────────────────"),
+            self.attempts_summary_line(self.i18n.attempts_today(), &self.attempts_today),
+            self.attempts_summary_line(self.i18n.attempts_week(), &week),
+            Line::from("─────────────────────────────────────"),
+            Line::from(format!("{}:", self.i18n.attempts_last_days())),
+        ];
+
+        for day in &self.attempts_last_7_days {
+            lines.push(self.attempts_day_line(day));
+        }
+
+        frame.render_widget(
+            Paragraph::new(lines)
+                .block(Block::default().borders(Borders::ALL))
+                .wrap(Wrap { trim: true }),
+            area,
+        );
+    }
+
     fn render_wall(&mut self, frame: &mut Frame, area: Rect) {
         let items = if self.wall_entries.is_empty() {
             vec![ListItem::new(Line::from(Span::styled(
@@ -755,5 +801,63 @@ impl Dashboard {
                 );
             }
         }
+    }
+
+    fn attempts_summary_line(&self, label: &str, day: &DayAttempts) -> Line<'static> {
+        Line::from(format!(
+            "{label:<12} {}: {}   {}: {}   {}: {}",
+            self.i18n.attempts_initiated(),
+            day.initiated,
+            self.i18n.attempts_resisted(),
+            day.resisted,
+            self.i18n.attempts_completed(),
+            day.completed
+        ))
+    }
+
+    fn attempts_day_line(&self, day: &DayAttempts) -> Line<'static> {
+        let label = self.short_weekday(day.date.weekday());
+        let filled = if day.initiated == 0 {
+            0
+        } else {
+            ((day.resisted * 6) + (day.initiated / 2)) / day.initiated
+        };
+        let empty = 6_u32.saturating_sub(filled);
+        let bar = format!(
+            "{}{}",
+            "█".repeat(filled as usize),
+            "░".repeat(empty as usize)
+        );
+
+        let detail = if day.initiated == 0 {
+            format!("0  ← {}", self.i18n.attempts_no_attempts())
+        } else if day.resisted == day.initiated {
+            format!(
+                "{}/{}  ← {}",
+                day.resisted,
+                day.initiated,
+                self.i18n.attempts_clean_day()
+            )
+        } else {
+            format!("{}/{}", day.resisted, day.initiated)
+        };
+
+        let bar_color = if day.initiated == 0 {
+            Color::DarkGray
+        } else if day.resisted == day.initiated {
+            Color::Rgb(123, 201, 111)
+        } else {
+            Color::Rgb(241, 203, 126)
+        };
+
+        Line::from(vec![
+            Span::raw(format!("{label:<3}  ")),
+            Span::styled(bar, Style::default().fg(bar_color)),
+            Span::raw(format!("  {detail}")),
+        ])
+    }
+
+    fn short_weekday(&self, weekday: chrono::Weekday) -> String {
+        self.i18n.weekday(weekday).chars().take(3).collect()
     }
 }

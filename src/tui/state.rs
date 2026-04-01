@@ -1,3 +1,4 @@
+use crate::attempts::{self, DayAttempts};
 use crate::blocker::{self, StatusSnapshot};
 use crate::config::SystemConfig;
 use crate::doctor::{self, Diagnostic};
@@ -23,19 +24,21 @@ pub(crate) enum TabId {
     Schedule,
     Settings,
     Diagnostics,
+    Attempts,
     Streak,
     Wall,
     Exit,
 }
 
 impl TabId {
-    pub(crate) fn all() -> [Self; 8] {
+    pub(crate) fn all() -> [Self; 9] {
         [
             Self::Home,
             Self::Sites,
             Self::Schedule,
             Self::Settings,
             Self::Diagnostics,
+            Self::Attempts,
             Self::Streak,
             Self::Wall,
             Self::Exit,
@@ -49,9 +52,10 @@ impl TabId {
             Self::Schedule => 2,
             Self::Settings => 3,
             Self::Diagnostics => 4,
-            Self::Streak => 5,
-            Self::Wall => 6,
-            Self::Exit => 7,
+            Self::Attempts => 5,
+            Self::Streak => 6,
+            Self::Wall => 7,
+            Self::Exit => 8,
         }
     }
 
@@ -82,6 +86,8 @@ pub(crate) struct Dashboard {
     pub(crate) unblock_flow: Option<UnblockFlow>,
     pub(crate) pending_unblock: Option<String>,
     pub(crate) streak: StreakState,
+    pub(crate) attempts_today: DayAttempts,
+    pub(crate) attempts_last_7_days: Vec<DayAttempts>,
     pub(crate) wall_entries: Vec<journal::JournalEntry>,
     pub(crate) wall_state: ListState,
 }
@@ -116,6 +122,8 @@ impl Dashboard {
             unblock_flow: None,
             pending_unblock: None,
             streak: streak::load().unwrap_or_default(),
+            attempts_today: attempts::today().unwrap_or_default(),
+            attempts_last_7_days: attempts::last_n_days(7).unwrap_or_default(),
             wall_entries: journal::load().unwrap_or_default(),
             wall_state: ListState::default(),
         })
@@ -137,7 +145,13 @@ impl Dashboard {
     pub(crate) fn refresh_status(&mut self) -> Result<()> {
         self.status = blocker::status_snapshot(&self.config)?;
         self.streak = streak::load().unwrap_or_default();
+        self.refresh_attempts();
         Ok(())
+    }
+
+    pub(crate) fn refresh_attempts(&mut self) {
+        self.attempts_today = attempts::today().unwrap_or_default();
+        self.attempts_last_7_days = attempts::last_n_days(7).unwrap_or_default();
     }
 
     pub(crate) fn refresh_diagnostics(&mut self) -> Result<()> {
