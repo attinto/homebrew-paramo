@@ -37,6 +37,10 @@ pub fn user_journal_file() -> PathBuf {
     user_config_dir().join("journal.log")
 }
 
+pub fn user_witness_file() -> PathBuf {
+    user_config_dir().join("witness.log")
+}
+
 pub fn brew_bin_candidates() -> [PathBuf; 2] {
     [
         PathBuf::from("/opt/homebrew/bin/paramo"),

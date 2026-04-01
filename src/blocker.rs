@@ -34,6 +34,7 @@ pub struct StatusSnapshot {
 
 pub fn run_daemon(config: &SystemConfig) -> Result<()> {
     crate::ipc::listen()?;
+    crate::witness::start();
     loop {
         let current = SystemConfig::load().unwrap_or_else(|_| config.clone());
         let interval = Duration::from_secs(current.daemon.interval_seconds.max(10) as u64);

@@ -13,6 +13,7 @@ mod preferences;
 mod report;
 mod scheduler;
 mod tui;
+mod witness;
 
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -52,6 +53,8 @@ enum Command {
     Monje(MonjeCommand),
     #[command(about = "Muestra el reporte semanal de distracciones")]
     Reporte,
+    #[command(about = "Muestra los intentos de acceso interceptados hoy")]
+    Testigo,
 }
 
 #[derive(Subcommand)]
@@ -259,6 +262,9 @@ fn main() -> Result<()> {
         },
         Some(Command::Reporte) => {
             print!("{}", report::weekly_report());
+        }
+        Some(Command::Testigo) => {
+            print!("{}", witness::format_today_report());
         }
         None => {
             if std::io::stdout().is_terminal() {
