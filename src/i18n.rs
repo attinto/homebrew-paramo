@@ -493,4 +493,67 @@ impl I18n {
             "off"
         }
     }
+
+    pub fn wall_tab(self) -> &'static str {
+        match self.language {
+            Language::Es => "Muro",
+            Language::En => "Wall",
+        }
+    }
+
+    pub fn wall_title(self) -> &'static str {
+        match self.language {
+            Language::Es => "Muro de la vergüenza",
+            Language::En => "Wall of Shame",
+        }
+    }
+
+    pub fn wall_empty(self) -> &'static str {
+        match self.language {
+            Language::Es => "No hay registros todavía. ¡Sigue así!",
+            Language::En => "No entries yet. Keep it up!",
+        }
+    }
+
+    pub fn countdown_title(self) -> &'static str {
+        match self.language {
+            Language::Es => "¿Seguro que quieres desbloquear?",
+            Language::En => "Are you sure you want to unblock?",
+        }
+    }
+
+    pub fn countdown_subtitle(self) -> &'static str {
+        match self.language {
+            Language::Es => "Tómate un momento antes de decidir",
+            Language::En => "Take a moment before deciding",
+        }
+    }
+
+    pub fn countdown_hint(self) -> &'static str {
+        match self.language {
+            Language::Es => "Esc para cancelar",
+            Language::En => "Esc to cancel",
+        }
+    }
+
+    pub fn reason_prompt_title(self) -> &'static str {
+        match self.language {
+            Language::Es => "¿Por qué quieres desbloquear?",
+            Language::En => "Why do you want to unblock?",
+        }
+    }
+
+    pub fn reason_prompt_hint(self) -> &'static str {
+        match self.language {
+            Language::Es => "Enter para confirmar · Esc para cancelar",
+            Language::En => "Enter to confirm · Esc to cancel",
+        }
+    }
+
+    pub fn unblock_cancelled(self) -> &'static str {
+        match self.language {
+            Language::Es => "Desbloqueo cancelado. ¡Bien hecho!",
+            Language::En => "Unblock cancelled. Well done!",
+        }
+    }
 }

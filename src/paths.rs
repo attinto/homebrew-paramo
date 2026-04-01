@@ -33,6 +33,10 @@ pub fn user_preferences_file() -> PathBuf {
     user_config_dir().join("preferences.toml")
 }
 
+pub fn user_journal_file() -> PathBuf {
+    user_config_dir().join("journal.log")
+}
+
 pub fn brew_bin_candidates() -> [PathBuf; 2] {
     [
         PathBuf::from("/opt/homebrew/bin/paramo"),

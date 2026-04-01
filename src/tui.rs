@@ -3,11 +3,13 @@ use crate::config::{SiteMutation, SystemConfig};
 use crate::doctor::{self, Diagnostic, DiagnosticLevel};
 use crate::i18n::{I18n, Language};
 use crate::ipc;
+use crate::journal;
 use crate::paths;
 use crate::preferences::UserPreferences;
 use anyhow::Result;
 use chrono::Datelike;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+use std::time::Instant;
 use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -39,6 +41,65 @@ const ASCII_ART: &[&str] = &[
     r"ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
 ];
 
+const DISTRACTION_PHRASES: &[&str] = &[
+    "Brillando",
+    "Zumbando",
+    "Revoloteando",
+    "Saltando",
+    "Flotando",
+    "Destellando",
+    "Chapoteando",
+    "Sonriendo",
+    "Resplandeciendo",
+    "Canturreando",
+    "Dançando",
+    "Girando",
+    "Burbujeando",
+    "Crepitando",
+    "Pintando",
+    "Tejiendo",
+    "Explorando",
+    "Saltimbanqueando",
+    "Chapurreando",
+    "Lumineando",
+    "Zarandeando",
+    "Tintineando",
+    "Rebotando",
+    "Culebreando",
+    "Espiraleando",
+    "Saltarínando",
+    "Voloteando",
+    "Susurrando",
+    "Chispeando",
+    "Danilando",
+    "Burbujeleteando",
+    "Prismando",
+    "Meneoando",
+    "Brincolineando",
+    "Planteando",
+    "Revolineando",
+    "Sonorineando",
+    "Floreando",
+    "Risueñeando",
+    "Lumineleando",
+    "Carcajeando",
+    "Tintoreando",
+    "Brillulineando",
+    "Zumbileando",
+    "Espumando",
+    "Chapoteleando",
+    "Vuelineando",
+    "Trinando",
+    "Susurrileando",
+    "Ventileando",
+];
+
+#[derive(Debug)]
+enum UnblockFlow {
+    Countdown { started: Instant },
+    ReasonPrompt { value: String },
+}
+
 #[derive(Debug, Clone, Copy)]
 enum TabId {
     Home,
@@ -46,17 +107,19 @@ enum TabId {
     Schedule,
     Settings,
     Diagnostics,
+    Wall,
     Exit,
 }
 
 impl TabId {
-    fn all() -> [Self; 6] {
+    fn all() -> [Self; 7] {
         [
             Self::Home,
             Self::Sites,
             Self::Schedule,
             Self::Settings,
             Self::Diagnostics,
+            Self::Wall,
             Self::Exit,
         ]
     }
@@ -68,7 +131,8 @@ impl TabId {
             Self::Schedule => 2,
             Self::Settings => 3,
             Self::Diagnostics => 4,
-            Self::Exit => 5,
+            Self::Wall => 5,
+            Self::Exit => 6,
         }
     }
 
@@ -96,6 +160,9 @@ struct Dashboard {
     schedule_cursor: usize,
     flash_message: Option<String>,
     prompt: Option<PromptState>,
+    unblock_flow: Option<UnblockFlow>,
+    wall_entries: Vec<journal::JournalEntry>,
+    wall_state: ListState,
 }
 
 pub fn run(config: &mut SystemConfig, prefs: &mut UserPreferences) -> Result<()> {
@@ -146,10 +213,15 @@ impl Dashboard {
             schedule_cursor: 0,
             flash_message: None,
             prompt: None,
+            unblock_flow: None,
+            wall_entries: journal::load().unwrap_or_default(),
+            wall_state: ListState::default(),
         })
     }
 
     fn render(&mut self, frame: &mut Frame) {
+        self.advance_unblock_flow();
+
         let outer = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -168,6 +240,8 @@ impl Dashboard {
         if let Some(prompt) = &self.prompt {
             self.render_prompt(frame, prompt);
         }
+
+        self.render_unblock_flow(frame);
     }
 
     fn render_header(&self, frame: &mut Frame, area: Rect) {
@@ -248,6 +322,7 @@ impl Dashboard {
             self.i18n.schedule_tab(),
             self.i18n.settings_tab(),
             self.i18n.diagnostics_tab(),
+            self.i18n.wall_tab(),
             self.i18n.exit_tab(),
         ]
         .into_iter()
@@ -275,6 +350,7 @@ impl Dashboard {
             TabId::Schedule => self.render_schedule(frame, area),
             TabId::Settings => self.render_settings(frame, area),
             TabId::Diagnostics => self.render_diagnostics(frame, area),
+            TabId::Wall => self.render_wall(frame, area),
             TabId::Exit => self.render_exit(frame, area),
         }
     }
@@ -621,6 +697,137 @@ impl Dashboard {
         );
     }
 
+    fn render_wall(&mut self, frame: &mut Frame, area: Rect) {
+        let items = if self.wall_entries.is_empty() {
+            vec![ListItem::new(Line::from(Span::styled(
+                self.i18n.wall_empty(),
+                Style::default().fg(Color::Rgb(177, 214, 166))),
+            ))]
+        } else {
+            self.wall_entries
+                .iter()
+                .map(|entry| {
+                    let timestamp = entry.timestamp.format("%d/%m/%Y %H:%M").to_string();
+                    ListItem::new(vec![
+                        Line::from(Span::styled(
+                            timestamp,
+                            Style::default().fg(Color::Rgb(190, 197, 208)),
+                        )),
+                        Line::from(Span::styled(
+                            format!("  {}", entry.reason),
+                            Style::default()
+                                .fg(Color::Rgb(224, 102, 102))
+                                .add_modifier(Modifier::BOLD),
+                        )),
+                        Line::from(""),
+                    ])
+                })
+                .collect()
+        };
+
+        let list = List::new(items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(self.i18n.wall_title()),
+            )
+            .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+            .highlight_symbol("› ");
+
+        frame.render_stateful_widget(list, area, &mut self.wall_state);
+    }
+
+    fn render_unblock_flow(&self, frame: &mut Frame) {
+        match &self.unblock_flow {
+            None => {}
+            Some(UnblockFlow::Countdown { started }) => {
+                let elapsed = started.elapsed().as_secs().min(30);
+                let remaining = 30 - elapsed;
+                let phrase_index = (elapsed / 3) as usize % DISTRACTION_PHRASES.len();
+                let phrase = DISTRACTION_PHRASES[phrase_index];
+
+                let area = centered_rect(62, 55, frame.area());
+                frame.render_widget(Clear, area);
+                frame.render_widget(
+                    Paragraph::new(vec![
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            self.i18n.countdown_title(),
+                            Style::default()
+                                .fg(Color::Rgb(241, 203, 126))
+                                .add_modifier(Modifier::BOLD),
+                        )),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            self.i18n.countdown_subtitle(),
+                            Style::default().fg(Color::Rgb(231, 223, 201)),
+                        )),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            format!("{}", remaining),
+                            Style::default()
+                                .fg(Color::Rgb(224, 102, 102))
+                                .add_modifier(Modifier::BOLD),
+                        )),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            phrase,
+                            Style::default()
+                                .fg(Color::Rgb(177, 214, 166))
+                                .add_modifier(Modifier::BOLD | Modifier::ITALIC),
+                        )),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            self.i18n.countdown_hint(),
+                            Style::default().fg(Color::Rgb(190, 197, 208)),
+                        )),
+                    ])
+                    .alignment(Alignment::Center)
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title(paths::APP_DISPLAY_NAME),
+                    ),
+                    area,
+                );
+            }
+            Some(UnblockFlow::ReasonPrompt { value }) => {
+                let area = centered_rect(70, 35, frame.area());
+                frame.render_widget(Clear, area);
+                frame.render_widget(
+                    Paragraph::new(vec![
+                        Line::from(Span::styled(
+                            self.i18n.reason_prompt_title(),
+                            Style::default()
+                                .fg(Color::Rgb(241, 203, 126))
+                                .add_modifier(Modifier::BOLD),
+                        )),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            value.clone(),
+                            Style::default()
+                                .fg(Color::Rgb(231, 223, 201))
+                                .add_modifier(Modifier::BOLD),
+                        )),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            self.i18n.reason_prompt_hint(),
+                            Style::default().fg(Color::Rgb(190, 197, 208)),
+                        )),
+                    ])
+                    .block(Block::default().borders(Borders::ALL).title(
+                        match self.i18n.language() {
+                            Language::Es => "Motivo",
+                            Language::En => "Reason",
+                        },
+                    ))
+                    .alignment(Alignment::Left),
+                    area,
+                );
+            }
+        }
+    }
+
     fn render_footer(&self, frame: &mut Frame, area: Rect) {
         let fallback = match self.active_tab {
             TabId::Diagnostics => self.i18n.diagnostics_refresh().to_string(),
@@ -664,6 +871,10 @@ impl Dashboard {
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> Result<bool> {
+        if self.unblock_flow.is_some() {
+            return self.handle_unblock_flow_key(key);
+        }
+
         if self.prompt.is_some() {
             return self.handle_prompt_key(key);
         }
@@ -688,6 +899,7 @@ impl Dashboard {
             TabId::Schedule => self.handle_schedule_key(key)?,
             TabId::Settings => self.handle_settings_key(key)?,
             TabId::Diagnostics => self.handle_diagnostics_key(key)?,
+            TabId::Wall => self.handle_wall_key(key),
             TabId::Exit => {
                 if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
                     return Ok(true);
@@ -747,6 +959,30 @@ impl Dashboard {
         Ok(())
     }
 
+    fn handle_wall_key(&mut self, key: KeyEvent) {
+        if self.wall_entries.is_empty() {
+            return;
+        }
+        let len = self.wall_entries.len();
+        match key.code {
+            KeyCode::Down => {
+                let next = match self.wall_state.selected() {
+                    Some(i) => (i + 1) % len,
+                    None => 0,
+                };
+                self.wall_state.select(Some(next));
+            }
+            KeyCode::Up => {
+                let next = match self.wall_state.selected() {
+                    Some(i) => (i + len - 1) % len,
+                    None => 0,
+                };
+                self.wall_state.select(Some(next));
+            }
+            _ => {}
+        }
+    }
+
     fn handle_prompt_key(&mut self, key: KeyEvent) -> Result<bool> {
         let prompt = self.prompt.as_mut().expect("prompt must exist");
         match key.code {
@@ -780,12 +1016,76 @@ impl Dashboard {
     }
 
     fn try_unblock(&mut self) -> Result<()> {
-        match ipc::send_command("unblock") {
-            Ok(()) => self.set_flash(self.i18n.unblocked_now()),
-            Err(error) => self.set_flash(error),
+        if self.status.schedule_active {
+            self.unblock_flow = Some(UnblockFlow::Countdown {
+                started: Instant::now(),
+            });
+        } else {
+            match ipc::send_command("unblock") {
+                Ok(()) => self.set_flash(self.i18n.unblocked_now()),
+                Err(error) => self.set_flash(error),
+            }
+            self.refresh_status()?;
         }
-        self.refresh_status()?;
         Ok(())
+    }
+
+    fn advance_unblock_flow(&mut self) {
+        let should_transition = match &self.unblock_flow {
+            Some(UnblockFlow::Countdown { started }) => started.elapsed().as_secs() >= 30,
+            _ => false,
+        };
+        if should_transition {
+            self.unblock_flow = Some(UnblockFlow::ReasonPrompt {
+                value: String::new(),
+            });
+        }
+    }
+
+    fn handle_unblock_flow_key(&mut self, key: KeyEvent) -> Result<bool> {
+        // Esc siempre cancela el flow
+        if matches!(key.code, KeyCode::Esc) {
+            self.unblock_flow = None;
+            self.set_flash(self.i18n.unblock_cancelled());
+            return Ok(false);
+        }
+
+        let is_reason_prompt = matches!(
+            self.unblock_flow,
+            Some(UnblockFlow::ReasonPrompt { .. })
+        );
+
+        if is_reason_prompt {
+            match key.code {
+                KeyCode::Enter => {
+                    let reason = match &self.unblock_flow {
+                        Some(UnblockFlow::ReasonPrompt { value }) => value.trim().to_string(),
+                        _ => String::new(),
+                    };
+                    self.unblock_flow = None;
+                    let _ = journal::append(&reason);
+                    self.wall_entries = journal::load().unwrap_or_default();
+                    match ipc::send_command("unblock") {
+                        Ok(()) => self.set_flash(self.i18n.unblocked_now()),
+                        Err(error) => self.set_flash(error),
+                    }
+                    self.refresh_status()?;
+                }
+                KeyCode::Backspace => {
+                    if let Some(UnblockFlow::ReasonPrompt { value }) = &mut self.unblock_flow {
+                        value.pop();
+                    }
+                }
+                KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    if let Some(UnblockFlow::ReasonPrompt { value }) = &mut self.unblock_flow {
+                        value.push(ch);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(false)
     }
 
     fn add_site(&mut self, raw: &str) -> Result<()> {
