@@ -1,6 +1,7 @@
 # PARAMO
 
-PARAMO es un bloqueador de distracciones para macOS escrito en Rust. Gestiona una sección propia dentro de `/etc/hosts`, ofrece CLI y TUI, y puede quedar instalado como daemon de `launchd` para aplicar el bloqueo por horario sin tener que abrir la app manualmente.
+PARAMO es un bloqueador de distracciones para macOS escrito en Rust. Gestiona una sección propia dentro de `/etc/hosts`, ofrece CLI y TUI, y puede quedar instalado como daemon de `launchd` para aplicar el bloqueo por horario sin tener que abrir la app manualmente. 
+
 
 ## Instalación con Homebrew
 
