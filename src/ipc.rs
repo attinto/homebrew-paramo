@@ -3,10 +3,16 @@ use crate::config::SystemConfig;
 use crate::paths;
 use anyhow::{Context, Result};
 use std::io::{BufRead, BufReader, Write};
+#[cfg(target_os = "macos")]
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
-use tracing::{error, info};
+use std::sync::mpsc;
+use tracing::{error, info, warn};
+
+// Número máximo de conexiones simultáneas al daemon.
+// Para un bloqueador de sitios local esto es más que suficiente.
+const MAX_WORKERS: usize = 4;
 
 fn handle_connection(mut stream: UnixStream, allowed_uid: u32) {
     match peer_euid(&stream) {
@@ -15,13 +21,21 @@ fn handle_connection(mut stream: UnixStream, allowed_uid: u32) {
             let _ = writeln!(stream, "Unauthorized client uid: {uid}");
             return;
         }
-        Err(error) => {
-            let _ = writeln!(stream, "Failed to validate client identity: {error}");
+        Err(e) => {
+            let _ = writeln!(stream, "Failed to validate client identity: {e}");
             return;
         }
     }
 
-    let reader = BufReader::new(stream.try_clone().expect("clone ipc stream"));
+    let reader = match stream.try_clone() {
+        Ok(cloned) => BufReader::new(cloned),
+        Err(e) => {
+            error!("IPC: failed to clone stream: {}", e);
+            let _ = writeln!(stream, "Internal error: could not read command");
+            return;
+        }
+    };
+
     if let Some(Ok(line)) = reader.lines().next() {
         let config = SystemConfig::load().unwrap_or_default();
         let response = match line.trim() {
@@ -30,23 +44,35 @@ fn handle_connection(mut stream: UnixStream, allowed_uid: u32) {
                     info!("IPC: block applied");
                     "ok".to_string()
                 }
-                Err(e) => e.to_string(),
+                Err(e) => {
+                    error!("IPC: block failed: {}", e);
+                    e.to_string()
+                }
             },
             "unblock" => match blocker::unblock_now(&config) {
                 Ok(()) => {
                     info!("IPC: unblock applied");
                     "ok".to_string()
                 }
-                Err(e) => e.to_string(),
+                Err(e) => {
+                    error!("IPC: unblock failed: {}", e);
+                    e.to_string()
+                }
             },
             "sync" => match blocker::run(&config) {
                 Ok(_) => {
                     info!("IPC: sync completed");
                     "ok".to_string()
                 }
-                Err(e) => e.to_string(),
+                Err(e) => {
+                    error!("IPC: sync failed: {}", e);
+                    e.to_string()
+                }
             },
-            other => format!("Unknown command: {other}"),
+            other => {
+                warn!("IPC: unknown command '{}'", other);
+                format!("Unknown command: {other}")
+            }
         };
         let _ = writeln!(stream, "{response}");
     }
@@ -64,11 +90,34 @@ pub fn listen() -> Result<()> {
     std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600))
         .with_context(|| format!("failed to secure IPC socket at {}", socket_path))?;
 
-    std::thread::spawn(move || {
-        for stream in listener.incoming() {
+    // Canal de capacidad limitada: si está lleno, la conexión entrante se descarta
+    // en lugar de crear un thread sin límite.
+    let (tx, rx) = mpsc::sync_channel::<UnixStream>(MAX_WORKERS * 2);
+
+    // Receptor compartido entre los workers del pool
+    let rx = std::sync::Arc::new(std::sync::Mutex::new(rx));
+
+    for _ in 0..MAX_WORKERS {
+        let rx = std::sync::Arc::clone(&rx);
+        std::thread::spawn(move || loop {
+            let stream = match rx.lock() {
+                Ok(guard) => guard.recv(),
+                Err(_) => break,
+            };
             match stream {
+                Ok(stream) => handle_connection(stream, allowed_uid),
+                Err(_) => break, // canal cerrado, el worker termina limpiamente
+            }
+        });
+    }
+
+    std::thread::spawn(move || {
+        for incoming in listener.incoming() {
+            match incoming {
                 Ok(stream) => {
-                    std::thread::spawn(move || handle_connection(stream, allowed_uid));
+                    if tx.try_send(stream).is_err() {
+                        warn!("IPC: connection queue full, dropping connection");
+                    }
                 }
                 Err(e) => {
                     error!("IPC accept error: {}", e);
@@ -128,6 +177,9 @@ fn set_socket_owner(path: &str, uid: u32, gid: u32) -> Result<()> {
     }
 }
 
+// getpeereid es exclusivo de macOS/BSD. En Linux se usa SO_PEERCRED.
+// En producción esto solo corre en macOS (app macOS-only).
+#[cfg(target_os = "macos")]
 fn peer_euid(stream: &UnixStream) -> std::io::Result<u32> {
     let mut euid: libc::uid_t = 0;
     let mut egid: libc::gid_t = 0;
@@ -137,4 +189,11 @@ fn peer_euid(stream: &UnixStream) -> std::io::Result<u32> {
     } else {
         Err(std::io::Error::last_os_error())
     }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn peer_euid(_stream: &UnixStream) -> std::io::Result<u32> {
+    // Fallback para builds de desarrollo en Linux.
+    // En producción paramo solo corre en macOS.
+    Ok(unsafe { libc::getuid() })
 }

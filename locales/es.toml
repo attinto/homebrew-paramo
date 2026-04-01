@@ -1,0 +1,125 @@
+# Traducciones en español
+# Los parámetros se indican como {0}, {1}, {2}...
+
+# Estado general
+blocked_label        = "BLOQUEADO"
+unblocked_label      = "DESBLOQUEADO"
+schedule_active_label   = "Horario de bloqueo activo"
+schedule_inactive_label = "Fuera del horario de bloqueo"
+next_change_label    = "Próximo cambio"
+relative_time_label  = "desde ahora"
+configured_sites_label = "Sitios configurados"
+status_title         = "Estado"
+subtitle             = "Aíslate para construir"
+
+# Días de la semana
+weekday_mon = "Lunes"
+weekday_tue = "Martes"
+weekday_wed = "Miércoles"
+weekday_thu = "Jueves"
+weekday_fri = "Viernes"
+weekday_sat = "Sábado"
+weekday_sun = "Domingo"
+
+# Mensajes de acción
+requires_root     = "Esta acción requiere permisos de administrador. Ejecútala con sudo."
+blocked_now       = "Bloqueo manual aplicado."
+unblocked_now     = "Bloqueo manual retirado."
+unblock_cancelled = "Desbloqueo cancelado. ¡Bien hecho!"
+
+# Mensajes parametrizados (usa {0}, {1}, {2} como marcadores)
+language_updated    = "Idioma actualizado a {0}."
+current_language    = "Idioma actual: {0} ({1})"
+site_added          = "Sitio añadido: {0}"
+site_removed        = "Sitio eliminado: {0}"
+site_already_present = "El sitio ya estaba en la lista: {0}"
+site_not_found      = "El sitio no estaba en la lista: {0}"
+unsupported_language = "Idioma no soportado: {0}"
+schedule_updated    = "Horario actualizado: {0}:00 -> {1}:00 | fines de semana: {2}"
+schedule_summary    = "Horario: {0}:00 -> {1}:00 | fines de semana: {2}"
+
+# Instalación
+install_started   = "Instalando PARAMO..."
+install_completed = "Instalación completada."
+uninstall_started   = "Desinstalando PARAMO..."
+uninstall_completed = "Desinstalación completada."
+install_note = "Instalación del sistema: ejecuta `sudo paramo install` para crear `/etc/paramo` y registrar el daemon."
+
+# Pestañas de la TUI
+home_tab        = "Inicio"
+sites_tab       = "Sitios"
+schedule_tab    = "Horario"
+settings_tab    = "Ajustes"
+diagnostics_tab = "Diagnóstico"
+wall_tab        = "Muro"
+exit_tab        = "Salir"
+
+# Diagnóstico
+doctor_title       = "Diagnóstico"
+diagnostics_refresh = "Pulsa g para relanzar el diagnóstico."
+ok_label      = "OK"
+warning_label = "AVISO"
+error_label   = "ERROR"
+
+# Pantalla de inicio
+home_actions       = "Acciones rápidas"
+home_action_block   = "b  Bloquear ahora"
+home_action_unblock = "u  Desbloquear ahora"
+home_action_refresh = "r  Recargar estado"
+home_action_exit    = "Salir  Pestaña Salir + Enter o q"
+
+# Gestión de sitios
+site_empty         = "No hay sitios configurados."
+add_site_prompt    = "Añadir sitio: escribe un dominio y pulsa Enter"
+selected_label     = "Seleccionado"
+site_add_action    = "a  Añadir sitio"
+site_remove_action = "d  Eliminar sitio"
+site_move_selection = "↑ ↓  Mover selección"
+manage_label       = "Gestión"
+
+# Horario
+schedule_controls = "Cursores arriba/abajo seleccionan campo. Izquierda/derecha cambia valor."
+weekends_label    = "Fines de semana"
+weekends_on       = "activados"
+weekends_off      = "desactivados"
+start_label       = "Inicio"
+end_label         = "Fin"
+controls_label    = "Control"
+
+# Ajustes
+language_label      = "Idioma"
+language_change_hint = "← → cambian el idioma"
+
+# Pantalla de salida
+exit_screen_title = "Salir de PARAMO"
+exit_screen_body  = "Pulsa Enter para cerrar la TUI."
+exit_screen_hint  = "También puedes salir en cualquier momento con q."
+
+# Cabecera / atajos
+header_nav_hint     = "Tab  Navegar"
+header_confirm_hint = "Enter  Confirmar"
+header_quit_hint    = "q  Salir"
+tui_hint = "Tab/cursor para navegar, a para añadir, d para borrar, b/u para bloquear, q para salir o pestaña Salir + Enter"
+
+# Muro de la vergüenza
+wall_title = "Muro de la vergüenza"
+wall_empty = "No hay registros todavía. ¡Sigue así!"
+
+# Flujo de desbloqueo
+countdown_title    = "¿Seguro que quieres desbloquear?"
+countdown_subtitle = "Tómate un momento antes de decidir"
+countdown_hint     = "Esc para cancelar"
+
+reason_prompt_title   = "¿Por qué quieres desbloquear?"
+reason_prompt_hint    = "Enter para confirmar · Esc para cancelar"
+reason_required       = "El motivo no puede estar vacío."
+reason_required_label = "Motivo (obligatorio)"
+
+final_countdown_title        = "Reflexiona. Queda un momento."
+final_countdown_reason_label = "Tu motivo"
+
+breath_in  = "inhala..."
+breath_out = "exhala..."
+
+# Entrada genérica
+input_label = "Entrada"
