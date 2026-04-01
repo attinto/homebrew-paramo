@@ -143,6 +143,48 @@ Compilar:
 cargo build --release
 ```
 
+## Actualizar rapido en tu terminal sin release
+
+Si solo quieres usar la version nueva en tu Mac, sin PR, sin tag y sin Homebrew, tienes dos opciones:
+
+### Opcion 1: probar al instante desde el repo
+
+```bash
+cargo run --release -- status
+cargo run --release -- doctor
+```
+
+O abrir directamente la app compilada:
+
+```bash
+cargo build --release
+./target/release/paramo
+```
+
+### Opcion 2: reemplazar tu binario local global
+
+```bash
+cargo install --path . --force
+```
+
+Despues puedes comprobar que `paramo` apunta al binario correcto:
+
+```bash
+which -a paramo
+```
+
+Si el de Homebrew sigue apareciendo antes que el de Cargo, usa directamente:
+
+```bash
+~/.cargo/bin/paramo
+```
+
+Si esta version cambia daemon, plist o configuracion del sistema, vuelve a instalar la parte de sistema con el binario local:
+
+```bash
+sudo ~/.cargo/bin/paramo install
+```
+
 Validar el proyecto:
 
 ```bash

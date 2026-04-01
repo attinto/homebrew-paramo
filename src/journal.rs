@@ -1,4 +1,5 @@
 use crate::paths;
+use crate::streak;
 use chrono::{DateTime, Local};
 use std::io::{BufRead, BufReader, Write};
 
@@ -27,6 +28,9 @@ pub fn append(reason: &str) -> std::io::Result<()> {
         .open(&path)?;
 
     writeln!(file, "{}|{}", timestamp, reason)?;
+    if let Err(error) = streak::record_break(reason) {
+        eprintln!("Failed to record streak break: {error}");
+    }
     Ok(())
 }
 
@@ -44,9 +48,7 @@ pub fn load() -> std::io::Result<Vec<JournalEntry>> {
         .filter_map(|line| {
             let line = line.ok()?;
             let (ts, reason) = line.split_once('|')?;
-            let timestamp = DateTime::parse_from_rfc3339(ts)
-                .ok()?
-                .with_timezone(&Local);
+            let timestamp = DateTime::parse_from_rfc3339(ts).ok()?.with_timezone(&Local);
             Some(JournalEntry {
                 timestamp,
                 reason: reason.to_string(),

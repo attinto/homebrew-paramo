@@ -1,0 +1,12 @@
+[package]
+name = "serde_json"
+version = "1.0.149"
+edition = "2021"
+
+[lib]
+name = "serde_json"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"

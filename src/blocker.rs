@@ -2,6 +2,7 @@ use crate::config::SystemConfig;
 use crate::hosts;
 use crate::i18n::I18n;
 use crate::scheduler;
+use crate::streak;
 use anyhow::Result;
 use chrono::{DateTime, Datelike, Local};
 use std::process::Command;
@@ -33,7 +34,20 @@ pub struct StatusSnapshot {
 
 pub fn run_daemon(config: &SystemConfig) -> Result<()> {
     crate::ipc::listen()?;
+    let mut last_streak_day = Local::now().date_naive();
+    if let Err(error) = streak::record_clean_day() {
+        eprintln!("Failed to record clean day: {error}");
+    }
+
     loop {
+        let today = Local::now().date_naive();
+        if today != last_streak_day {
+            if let Err(error) = streak::record_clean_day() {
+                eprintln!("Failed to record clean day: {error}");
+            }
+            last_streak_day = today;
+        }
+
         let current = SystemConfig::load().unwrap_or_else(|_| config.clone());
         let interval = Duration::from_secs(current.daemon.interval_seconds.max(10) as u64);
         let _ = run(&current);

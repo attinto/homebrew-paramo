@@ -3,14 +3,15 @@ mod config;
 mod doctor;
 mod hosts;
 mod i18n;
-mod ipc;
 mod install;
+mod ipc;
 mod journal;
 mod launchd;
 mod logging;
 mod paths;
 mod preferences;
 mod scheduler;
+mod streak;
 mod tui;
 
 use anyhow::{Context, Result};

@@ -191,9 +191,7 @@ fn plist_diagnostic(_config: &SystemConfig, i18n: I18n) -> Diagnostic {
     let binary = args.first().cloned();
     let run_argument_ok = args.get(1).is_some_and(|value| value == "run");
 
-    if label.as_deref() != Some(paths::LAUNCHD_LABEL)
-        || !run_argument_ok
-    {
+    if label.as_deref() != Some(paths::LAUNCHD_LABEL) || !run_argument_ok {
         return diagnostic(
             DiagnosticLevel::Warn,
             i18n,
@@ -202,10 +200,7 @@ fn plist_diagnostic(_config: &SystemConfig, i18n: I18n) -> Diagnostic {
                 "El plist de launchd no coincide con la configuración actual",
                 "The launchd plist does not match the current configuration",
             ),
-            format!(
-                "Label={:?}, ProgramArguments={:?}",
-                label, args
-            ),
+            format!("Label={:?}, ProgramArguments={:?}", label, args),
             Some(text(
                 i18n,
                 "Ejecuta `sudo paramo install` para regenerarlo.",

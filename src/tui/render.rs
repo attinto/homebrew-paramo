@@ -76,6 +76,18 @@ impl Dashboard {
             )),
             Line::from(""),
             Line::from(Span::styled(
+                format!(
+                    "{}: {} {}",
+                    self.i18n.streak_header(),
+                    self.streak.current,
+                    self.i18n.streak_days()
+                ),
+                Style::default()
+                    .fg(Color::Rgb(177, 214, 166))
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
                 self.i18n.header_nav_hint(),
                 Style::default().fg(Color::Rgb(190, 197, 208)),
             )),
@@ -110,6 +122,7 @@ impl Dashboard {
             self.i18n.schedule_tab(),
             self.i18n.settings_tab(),
             self.i18n.diagnostics_tab(),
+            self.i18n.streak_tab(),
             self.i18n.wall_tab(),
             self.i18n.exit_tab(),
         ]
@@ -138,6 +151,7 @@ impl Dashboard {
             TabId::Schedule => self.render_schedule(frame, area),
             TabId::Settings => self.render_settings(frame, area),
             TabId::Diagnostics => self.render_diagnostics(frame, area),
+            TabId::Streak => self.render_streak(frame, area),
             TabId::Wall => self.render_wall(frame, area),
             TabId::Exit => self.render_exit(frame, area),
         }
@@ -270,11 +284,7 @@ impl Dashboard {
                 self.i18n.configured_sites_label(),
                 self.config.sites.list.len()
             )),
-            Line::from(format!(
-                "{}: {}",
-                self.i18n.selected_label(),
-                selected_site
-            )),
+            Line::from(format!("{}: {}", self.i18n.selected_label(), selected_site)),
             Line::from(""),
             Line::from(self.i18n.site_add_action()),
             Line::from(self.i18n.site_remove_action()),
@@ -421,6 +431,56 @@ impl Dashboard {
             .highlight_symbol("• ");
 
         frame.render_stateful_widget(list, area, &mut self.diagnostics_state);
+    }
+
+    fn render_streak(&self, frame: &mut Frame, area: Rect) {
+        let last_break = self
+            .streak
+            .last_break
+            .map(|date| date.format("%d/%m/%Y").to_string())
+            .unwrap_or_else(|| self.i18n.streak_never_broken().to_string());
+        let last_break_reason = self
+            .streak
+            .last_break_reason
+            .clone()
+            .unwrap_or_else(|| self.i18n.streak_never_broken().to_string());
+
+        let content = vec![
+            Line::from(format!(
+                "{}: {} {}",
+                self.i18n.streak_current(),
+                self.streak.current,
+                self.i18n.streak_days()
+            )),
+            Line::from(format!(
+                "{}: {} {}",
+                self.i18n.streak_best(),
+                self.streak.best,
+                self.i18n.streak_days()
+            )),
+            Line::from(format!("{}: {}", self.i18n.streak_last_break(), last_break)),
+            Line::from(format!(
+                "{}: {}",
+                self.i18n.streak_last_break_reason(),
+                last_break_reason
+            )),
+            Line::from(format!(
+                "{}: {}",
+                self.i18n.streak_total_breaks(),
+                self.streak.total_breaks
+            )),
+        ];
+
+        frame.render_widget(
+            Paragraph::new(content)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(self.i18n.streak_tab()),
+                )
+                .wrap(Wrap { trim: true }),
+            area,
+        );
     }
 
     fn render_wall(&mut self, frame: &mut Frame, area: Rect) {
@@ -619,8 +679,7 @@ impl Dashboard {
                 let elapsed = started.elapsed().as_secs().min(60);
                 let remaining = 60 - elapsed;
 
-                let frame_idx =
-                    (started.elapsed().as_millis() / 120) as usize % WAVE_FRAMES.len();
+                let frame_idx = (started.elapsed().as_millis() / 120) as usize % WAVE_FRAMES.len();
                 let wave = WAVE_FRAMES[frame_idx];
 
                 let bar_width: usize = 30;

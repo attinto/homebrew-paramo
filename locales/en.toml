@@ -51,6 +51,7 @@ sites_tab       = "Sites"
 schedule_tab    = "Schedule"
 settings_tab    = "Settings"
 diagnostics_tab = "Diagnostics"
+streak_tab      = "Streak"
 wall_tab        = "Wall"
 exit_tab        = "Exit"
 
@@ -104,6 +105,14 @@ tui_hint = "Use Tab/arrows to navigate, a to add, d to delete, b/u to block, q t
 # Wall of shame
 wall_title = "Wall of Shame"
 wall_empty = "No entries yet. Keep it up!"
+streak_current = "Current streak"
+streak_best = "Best streak"
+streak_last_break = "Last break"
+streak_last_break_reason = "Reason"
+streak_total_breaks = "Total breaks"
+streak_days = "days"
+streak_never_broken = "Intact"
+streak_header = "Streak"
 
 # Unblock flow
 countdown_title    = "Are you sure you want to unblock?"

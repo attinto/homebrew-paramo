@@ -130,9 +130,8 @@ pub fn listen() -> Result<()> {
 }
 
 pub fn send_command(command: &str) -> Result<(), String> {
-    let stream = UnixStream::connect(paths::IPC_SOCKET).map_err(|_| {
-        "El daemon no está activo. Ejecuta: sudo paramo install".to_string()
-    })?;
+    let stream = UnixStream::connect(paths::IPC_SOCKET)
+        .map_err(|_| "El daemon no está activo. Ejecuta: sudo paramo install".to_string())?;
 
     let mut writer = &stream;
     writeln!(writer, "{command}").map_err(|e| format!("Error al enviar comando: {e}"))?;

@@ -701,7 +701,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "paramo"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -711,6 +711,7 @@ dependencies = [
  "libc",
  "ratatui",
  "serde",
+ "serde_json 1.0.149",
  "tempfile",
  "thiserror 1.0.69",
  "toml",
@@ -939,6 +940,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "serde_json"
+version = "1.0.149"
+dependencies = [
+ "serde",
+ "toml",
 ]
 
 [[package]]
@@ -1724,7 +1733,7 @@ dependencies = [
  "log",
  "serde",
  "serde_derive",
- "serde_json",
+ "serde_json 1.0.149 (registry+https://github.com/rust-lang/crates.io-index)",
  "wasm-encoder",
  "wasm-metadata",
  "wasmparser",
@@ -1744,7 +1753,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_derive",
- "serde_json",
+ "serde_json 1.0.149 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-xid",
  "wasmparser",
 ]

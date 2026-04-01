@@ -51,6 +51,7 @@ sites_tab       = "Sitios"
 schedule_tab    = "Horario"
 settings_tab    = "Ajustes"
 diagnostics_tab = "Diagnóstico"
+streak_tab      = "Racha"
 wall_tab        = "Muro"
 exit_tab        = "Salir"
 
@@ -104,6 +105,14 @@ tui_hint = "Tab/cursor para navegar, a para añadir, d para borrar, b/u para blo
 # Muro de la vergüenza
 wall_title = "Muro de la vergüenza"
 wall_empty = "No hay registros todavía. ¡Sigue así!"
+streak_current = "Racha actual"
+streak_best = "Mejor racha"
+streak_last_break = "Ultimo fallo"
+streak_last_break_reason = "Motivo"
+streak_total_breaks = "Total de fallos"
+streak_days = "dias"
+streak_never_broken = "Intacta"
+streak_header = "Racha"
 
 # Flujo de desbloqueo
 countdown_title    = "¿Seguro que quieres desbloquear?"

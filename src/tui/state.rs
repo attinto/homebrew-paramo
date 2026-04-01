@@ -4,6 +4,7 @@ use crate::doctor::{self, Diagnostic};
 use crate::i18n::I18n;
 use crate::journal;
 use crate::preferences::UserPreferences;
+use crate::streak::{self, StreakState};
 use anyhow::Result;
 use ratatui::widgets::ListState;
 use std::time::Instant;
@@ -22,18 +23,20 @@ pub(crate) enum TabId {
     Schedule,
     Settings,
     Diagnostics,
+    Streak,
     Wall,
     Exit,
 }
 
 impl TabId {
-    pub(crate) fn all() -> [Self; 7] {
+    pub(crate) fn all() -> [Self; 8] {
         [
             Self::Home,
             Self::Sites,
             Self::Schedule,
             Self::Settings,
             Self::Diagnostics,
+            Self::Streak,
             Self::Wall,
             Self::Exit,
         ]
@@ -46,8 +49,9 @@ impl TabId {
             Self::Schedule => 2,
             Self::Settings => 3,
             Self::Diagnostics => 4,
-            Self::Wall => 5,
-            Self::Exit => 6,
+            Self::Streak => 5,
+            Self::Wall => 6,
+            Self::Exit => 7,
         }
     }
 
@@ -77,6 +81,7 @@ pub(crate) struct Dashboard {
     pub(crate) prompt: Option<PromptState>,
     pub(crate) unblock_flow: Option<UnblockFlow>,
     pub(crate) pending_unblock: Option<String>,
+    pub(crate) streak: StreakState,
     pub(crate) wall_entries: Vec<journal::JournalEntry>,
     pub(crate) wall_state: ListState,
 }
@@ -110,6 +115,7 @@ impl Dashboard {
             prompt: None,
             unblock_flow: None,
             pending_unblock: None,
+            streak: streak::load().unwrap_or_default(),
             wall_entries: journal::load().unwrap_or_default(),
             wall_state: ListState::default(),
         })
@@ -130,6 +136,7 @@ impl Dashboard {
 
     pub(crate) fn refresh_status(&mut self) -> Result<()> {
         self.status = blocker::status_snapshot(&self.config)?;
+        self.streak = streak::load().unwrap_or_default();
         Ok(())
     }
 
@@ -208,9 +215,7 @@ impl Dashboard {
         }
 
         let final_done = match &self.unblock_flow {
-            Some(UnblockFlow::FinalCountdown { started, .. }) => {
-                started.elapsed().as_secs() >= 60
-            }
+            Some(UnblockFlow::FinalCountdown { started, .. }) => started.elapsed().as_secs() >= 60,
             _ => false,
         };
         if final_done {

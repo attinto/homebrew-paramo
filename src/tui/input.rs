@@ -4,6 +4,7 @@ use crate::config::SiteMutation;
 use crate::i18n::Language;
 use crate::ipc;
 use crate::journal;
+use crate::streak;
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::time::Instant;
@@ -34,6 +35,7 @@ impl Dashboard {
     pub(crate) fn perform_pending_actions(&mut self) -> Result<()> {
         if let Some(reason) = self.pending_unblock.take() {
             let _ = journal::append(&reason);
+            self.streak = streak::load().unwrap_or_default();
             self.wall_entries = journal::load().unwrap_or_default();
             match ipc::send_command("unblock") {
                 Ok(()) => self.set_flash(self.i18n.unblocked_now()),
@@ -51,6 +53,7 @@ impl Dashboard {
             TabId::Schedule => self.handle_schedule_key(key)?,
             TabId::Settings => self.handle_settings_key(key)?,
             TabId::Diagnostics => self.handle_diagnostics_key(key)?,
+            TabId::Streak => {}
             TabId::Wall => self.handle_wall_key(key),
             TabId::Exit => {
                 if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
@@ -165,10 +168,7 @@ impl Dashboard {
             return Ok(false);
         }
 
-        let is_reason_prompt = matches!(
-            self.unblock_flow,
-            Some(UnblockFlow::ReasonPrompt { .. })
-        );
+        let is_reason_prompt = matches!(self.unblock_flow, Some(UnblockFlow::ReasonPrompt { .. }));
 
         if is_reason_prompt {
             match key.code {
