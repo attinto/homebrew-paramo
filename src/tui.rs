@@ -94,10 +94,20 @@ const DISTRACTION_PHRASES: &[&str] = &[
     "Ventileando",
 ];
 
+const WAVE_FRAMES: &[&str] = &[
+    "≈   ≈   ≈   ≈   ≈   ≈   ≈",
+    " ≈   ≈   ≈   ≈   ≈   ≈   ",
+    "  ≈   ≈   ≈   ≈   ≈   ≈  ",
+    "   ≈   ≈   ≈   ≈   ≈   ≈ ",
+    "  ≈   ≈   ≈   ≈   ≈   ≈  ",
+    " ≈   ≈   ≈   ≈   ≈   ≈   ",
+];
+
 #[derive(Debug)]
 enum UnblockFlow {
     Countdown { started: Instant },
     ReasonPrompt { value: String },
+    FinalCountdown { started: Instant, reason: String },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -161,6 +171,7 @@ struct Dashboard {
     flash_message: Option<String>,
     prompt: Option<PromptState>,
     unblock_flow: Option<UnblockFlow>,
+    pending_unblock: Option<String>,
     wall_entries: Vec<journal::JournalEntry>,
     wall_state: ListState,
 }
@@ -171,6 +182,7 @@ pub fn run(config: &mut SystemConfig, prefs: &mut UserPreferences) -> Result<()>
 
     loop {
         terminal.terminal.draw(|frame| dashboard.render(frame))?;
+        dashboard.perform_pending_actions()?;
 
         if event::poll(Duration::from_millis(120))? {
             if let Event::Key(key) = event::read()? {
@@ -214,6 +226,7 @@ impl Dashboard {
             flash_message: None,
             prompt: None,
             unblock_flow: None,
+            pending_unblock: None,
             wall_entries: journal::load().unwrap_or_default(),
             wall_state: ListState::default(),
         })
@@ -817,11 +830,94 @@ impl Dashboard {
                     ])
                     .block(Block::default().borders(Borders::ALL).title(
                         match self.i18n.language() {
-                            Language::Es => "Motivo",
-                            Language::En => "Reason",
+                            Language::Es => "Motivo (obligatorio)",
+                            Language::En => "Reason (required)",
                         },
                     ))
                     .alignment(Alignment::Left),
+                    area,
+                );
+            }
+            Some(UnblockFlow::FinalCountdown { started, reason }) => {
+                let elapsed = started.elapsed().as_secs().min(60);
+                let remaining = 60 - elapsed;
+
+                // Ola animada: frame basado en tiempo real en ms
+                let frame_idx = (started.elapsed().as_millis() / 120) as usize
+                    % WAVE_FRAMES.len();
+                let wave = WAVE_FRAMES[frame_idx];
+
+                // Barra de progreso manual con bloques
+                let bar_width: usize = 30;
+                let filled = ((elapsed as usize) * bar_width) / 60;
+                let empty = bar_width - filled;
+                let bar = format!(
+                    "[{}{}] {}s",
+                    "█".repeat(filled),
+                    "░".repeat(empty),
+                    remaining,
+                );
+
+                // Inhala / exhala: ciclo de 4s
+                let breath = if (elapsed / 4) % 2 == 0 {
+                    self.i18n.breath_in()
+                } else {
+                    self.i18n.breath_out()
+                };
+
+                let area = centered_rect(68, 60, frame.area());
+                frame.render_widget(Clear, area);
+                frame.render_widget(
+                    Paragraph::new(vec![
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            self.i18n.final_countdown_title(),
+                            Style::default()
+                                .fg(Color::Rgb(241, 203, 126))
+                                .add_modifier(Modifier::BOLD),
+                        )),
+                        Line::from(""),
+                        Line::from(vec![
+                            Span::styled(
+                                format!("{}:  ", self.i18n.final_countdown_reason_label()),
+                                Style::default().fg(Color::Rgb(190, 197, 208)),
+                            ),
+                            Span::styled(
+                                format!("\"{}\"", reason),
+                                Style::default()
+                                    .fg(Color::Rgb(224, 102, 102))
+                                    .add_modifier(Modifier::BOLD | Modifier::ITALIC),
+                            ),
+                        ]),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            breath,
+                            Style::default()
+                                .fg(Color::Rgb(177, 214, 166))
+                                .add_modifier(Modifier::BOLD),
+                        )),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            wave,
+                            Style::default().fg(Color::Rgb(177, 214, 166)),
+                        )),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            bar,
+                            Style::default().fg(Color::Rgb(190, 197, 208)),
+                        )),
+                        Line::from(""),
+                        Line::from(Span::styled(
+                            self.i18n.countdown_hint(),
+                            Style::default().fg(Color::Rgb(190, 197, 208)),
+                        )),
+                    ])
+                    .alignment(Alignment::Center)
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title(paths::APP_DISPLAY_NAME),
+                    ),
                     area,
                 );
             }
@@ -1031,14 +1127,31 @@ impl Dashboard {
     }
 
     fn advance_unblock_flow(&mut self) {
-        let should_transition = match &self.unblock_flow {
+        // Countdown (30s) → ReasonPrompt
+        let to_reason = match &self.unblock_flow {
             Some(UnblockFlow::Countdown { started }) => started.elapsed().as_secs() >= 30,
             _ => false,
         };
-        if should_transition {
+        if to_reason {
             self.unblock_flow = Some(UnblockFlow::ReasonPrompt {
                 value: String::new(),
             });
+            return;
+        }
+
+        // FinalCountdown (60s) → pending_unblock (side-effects en perform_pending_actions)
+        let final_done = match &self.unblock_flow {
+            Some(UnblockFlow::FinalCountdown { started, .. }) => {
+                started.elapsed().as_secs() >= 60
+            }
+            _ => false,
+        };
+        if final_done {
+            let reason = match self.unblock_flow.take() {
+                Some(UnblockFlow::FinalCountdown { reason, .. }) => reason,
+                _ => String::new(),
+            };
+            self.pending_unblock = Some(reason);
         }
     }
 
@@ -1062,14 +1175,14 @@ impl Dashboard {
                         Some(UnblockFlow::ReasonPrompt { value }) => value.trim().to_string(),
                         _ => String::new(),
                     };
-                    self.unblock_flow = None;
-                    let _ = journal::append(&reason);
-                    self.wall_entries = journal::load().unwrap_or_default();
-                    match ipc::send_command("unblock") {
-                        Ok(()) => self.set_flash(self.i18n.unblocked_now()),
-                        Err(error) => self.set_flash(error),
+                    if reason.is_empty() {
+                        self.set_flash(self.i18n.reason_required());
+                    } else {
+                        self.unblock_flow = Some(UnblockFlow::FinalCountdown {
+                            started: Instant::now(),
+                            reason,
+                        });
                     }
-                    self.refresh_status()?;
                 }
                 KeyCode::Backspace => {
                     if let Some(UnblockFlow::ReasonPrompt { value }) = &mut self.unblock_flow {
@@ -1189,6 +1302,19 @@ impl Dashboard {
         self.i18n = I18n::new(self.prefs.language);
         self.set_flash(self.i18n.language_updated(self.prefs.language));
         self.refresh_diagnostics()?;
+        Ok(())
+    }
+
+    pub fn perform_pending_actions(&mut self) -> Result<()> {
+        if let Some(reason) = self.pending_unblock.take() {
+            let _ = journal::append(&reason);
+            self.wall_entries = journal::load().unwrap_or_default();
+            match ipc::send_command("unblock") {
+                Ok(()) => self.set_flash(self.i18n.unblocked_now()),
+                Err(error) => self.set_flash(error),
+            }
+            self.refresh_status()?;
+        }
         Ok(())
     }
 

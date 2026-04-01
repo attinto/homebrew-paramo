@@ -556,4 +556,39 @@ impl I18n {
             Language::En => "Unblock cancelled. Well done!",
         }
     }
+
+    pub fn reason_required(self) -> &'static str {
+        match self.language {
+            Language::Es => "El motivo no puede estar vacío.",
+            Language::En => "Reason cannot be empty.",
+        }
+    }
+
+    pub fn final_countdown_title(self) -> &'static str {
+        match self.language {
+            Language::Es => "Reflexiona. Queda un momento.",
+            Language::En => "Reflect. Almost there.",
+        }
+    }
+
+    pub fn final_countdown_reason_label(self) -> &'static str {
+        match self.language {
+            Language::Es => "Tu motivo",
+            Language::En => "Your reason",
+        }
+    }
+
+    pub fn breath_in(self) -> &'static str {
+        match self.language {
+            Language::Es => "inhala...",
+            Language::En => "breathe in...",
+        }
+    }
+
+    pub fn breath_out(self) -> &'static str {
+        match self.language {
+            Language::Es => "exhala...",
+            Language::En => "breathe out...",
+        }
+    }
 }
