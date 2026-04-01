@@ -105,9 +105,14 @@ const WAVE_FRAMES: &[&str] = &[
 
 #[derive(Debug)]
 enum UnblockFlow {
-    Countdown { started: Instant },
+    Countdown { started: Instant, duration_secs: u64 },
     ReasonPrompt { value: String },
     FinalCountdown { started: Instant, reason: String },
+}
+
+#[derive(Debug)]
+enum RemoveConfirmFlow {
+    Typing { site: String, typed: String },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -174,6 +179,7 @@ struct Dashboard {
     pending_unblock: Option<String>,
     wall_entries: Vec<journal::JournalEntry>,
     wall_state: ListState,
+    remove_flow: Option<RemoveConfirmFlow>,
 }
 
 pub fn run(config: &mut SystemConfig, prefs: &mut UserPreferences) -> Result<()> {
@@ -229,6 +235,7 @@ impl Dashboard {
             pending_unblock: None,
             wall_entries: journal::load().unwrap_or_default(),
             wall_state: ListState::default(),
+            remove_flow: None,
         })
     }
 
@@ -255,6 +262,7 @@ impl Dashboard {
         }
 
         self.render_unblock_flow(frame);
+        self.render_remove_flow(frame);
     }
 
     fn render_header(&self, frame: &mut Frame, area: Rect) {
@@ -391,6 +399,17 @@ impl Dashboard {
             .map(|next| next.format("%H:%M").to_string())
             .unwrap_or_else(|| "--:--".to_string());
 
+        let monk_line = if self.status.monk_mode {
+            Line::from(Span::styled(
+                format!("⛰  {} — {}", self.i18n.monk_mode_label(), self.i18n.monk_mode_active_label()),
+                Style::default()
+                    .fg(Color::Rgb(224, 102, 102))
+                    .add_modifier(Modifier::BOLD),
+            ))
+        } else {
+            Line::from("")
+        };
+
         let home_lines = vec![
             Line::from(format!(
                 "{} {}",
@@ -419,6 +438,8 @@ impl Dashboard {
                 self.i18n.next_change_label(),
                 next_change
             )),
+            Line::from(""),
+            monk_line,
         ];
 
         let status_panel = Paragraph::new(home_lines)
@@ -618,6 +639,18 @@ impl Dashboard {
     }
 
     fn render_settings(&self, frame: &mut Frame, area: Rect) {
+        let monk_status = if self.config.monk_mode {
+            Span::styled(
+                self.i18n.monk_mode_active_label(),
+                Style::default().fg(Color::Rgb(224, 102, 102)).add_modifier(Modifier::BOLD),
+            )
+        } else {
+            Span::styled(
+                self.i18n.monk_mode_inactive_label(),
+                Style::default().fg(Color::Rgb(177, 214, 166)),
+            )
+        };
+
         let content = vec![
             Line::from(format!(
                 "{}: {} ({})",
@@ -629,6 +662,12 @@ impl Dashboard {
                 Language::Es => "← → cambian el idioma",
                 Language::En => "← → changes the language",
             }),
+            Line::from(""),
+            Line::from(vec![
+                Span::raw(format!("{}: ", self.i18n.monk_mode_label())),
+                monk_status,
+            ]),
+            Line::from(self.i18n.monk_mode_toggle_hint()),
             Line::from(""),
             Line::from(self.i18n.install_note()),
         ];
@@ -753,9 +792,9 @@ impl Dashboard {
     fn render_unblock_flow(&self, frame: &mut Frame) {
         match &self.unblock_flow {
             None => {}
-            Some(UnblockFlow::Countdown { started }) => {
-                let elapsed = started.elapsed().as_secs().min(30);
-                let remaining = 30 - elapsed;
+            Some(UnblockFlow::Countdown { started, duration_secs }) => {
+                let elapsed = started.elapsed().as_secs().min(*duration_secs);
+                let remaining = duration_secs - elapsed;
                 let phrase_index = (elapsed / 3) as usize % DISTRACTION_PHRASES.len();
                 let phrase = DISTRACTION_PHRASES[phrase_index];
 
@@ -971,6 +1010,10 @@ impl Dashboard {
             return self.handle_unblock_flow_key(key);
         }
 
+        if self.remove_flow.is_some() {
+            return self.handle_remove_flow_key(key);
+        }
+
         if self.prompt.is_some() {
             return self.handle_prompt_key(key);
         }
@@ -1016,7 +1059,7 @@ impl Dashboard {
                     value: String::new(),
                 });
             }
-            KeyCode::Char('d') => self.remove_selected_site()?,
+            KeyCode::Char('d') => self.start_remove_confirm(),
             _ => {}
         }
 
@@ -1038,6 +1081,7 @@ impl Dashboard {
     fn handle_settings_key(&mut self, key: KeyEvent) -> Result<()> {
         match key.code {
             KeyCode::Left | KeyCode::Right | KeyCode::Enter => self.toggle_language()?,
+            KeyCode::Char('m') => self.toggle_monk_mode()?,
             _ => {}
         }
 
@@ -1112,9 +1156,25 @@ impl Dashboard {
     }
 
     fn try_unblock(&mut self) -> Result<()> {
+        if self.status.monk_mode {
+            self.set_flash(self.i18n.monk_mode_no_unblock());
+            return Ok(());
+        }
+
         if self.status.schedule_active {
+            let prior = journal::count_today();
+            let duration_secs: u64 = match prior {
+                0 => 30,
+                1 => 180,
+                2 => 600,
+                _ => 1800,
+            };
+            if prior > 0 {
+                self.set_flash(self.i18n.unlock_attempt_warning(prior));
+            }
             self.unblock_flow = Some(UnblockFlow::Countdown {
                 started: Instant::now(),
+                duration_secs,
             });
         } else {
             match ipc::send_command("unblock") {
@@ -1127,9 +1187,11 @@ impl Dashboard {
     }
 
     fn advance_unblock_flow(&mut self) {
-        // Countdown (30s) → ReasonPrompt
+        // Countdown → ReasonPrompt (duration depends on attempt count)
         let to_reason = match &self.unblock_flow {
-            Some(UnblockFlow::Countdown { started }) => started.elapsed().as_secs() >= 30,
+            Some(UnblockFlow::Countdown { started, duration_secs }) => {
+                started.elapsed().as_secs() >= *duration_secs
+            }
             _ => false,
         };
         if to_reason {
@@ -1303,6 +1365,139 @@ impl Dashboard {
         self.set_flash(self.i18n.language_updated(self.prefs.language));
         self.refresh_diagnostics()?;
         Ok(())
+    }
+
+    fn toggle_monk_mode(&mut self) -> Result<()> {
+        self.config.monk_mode = !self.config.monk_mode;
+        self.config.save_active()?;
+        match ipc::send_command("sync") {
+            Ok(()) => {
+                if self.config.monk_mode {
+                    self.set_flash(self.i18n.monk_mode_activated());
+                } else {
+                    self.set_flash(self.i18n.monk_mode_deactivated());
+                }
+            }
+            Err(error) => self.set_flash(error),
+        }
+        self.refresh_status()?;
+        Ok(())
+    }
+
+    fn start_remove_confirm(&mut self) {
+        let selected = self
+            .sites_state
+            .selected()
+            .and_then(|i| self.config.sites.list.get(i))
+            .cloned();
+        if let Some(site) = selected {
+            self.remove_flow = Some(RemoveConfirmFlow::Typing {
+                site,
+                typed: String::new(),
+            });
+        } else {
+            self.set_flash(self.i18n.site_empty());
+        }
+    }
+
+    fn handle_remove_flow_key(&mut self, key: KeyEvent) -> Result<bool> {
+        if matches!(key.code, KeyCode::Esc) {
+            self.remove_flow = None;
+            self.set_flash(self.i18n.unblock_cancelled());
+            return Ok(false);
+        }
+
+        if let Some(RemoveConfirmFlow::Typing { site, typed }) = &mut self.remove_flow {
+            match key.code {
+                KeyCode::Enter => {
+                    if *typed == *site {
+                        let site_clone = site.clone();
+                        self.remove_flow = None;
+                        self.remove_selected_site_confirmed(&site_clone)?;
+                    } else {
+                        self.remove_flow = None;
+                        self.set_flash(self.i18n.remove_confirm_wrong());
+                    }
+                }
+                KeyCode::Backspace => {
+                    typed.pop();
+                }
+                KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    typed.push(ch);
+                }
+                _ => {}
+            }
+        }
+
+        Ok(false)
+    }
+
+    fn remove_selected_site_confirmed(&mut self, site: &str) -> Result<()> {
+        match self.config.remove_site(site) {
+            Ok(SiteMutation::Removed(removed)) => {
+                self.config.save_active()?;
+                match ipc::send_command("sync") {
+                    Ok(()) => self.set_flash(self.i18n.site_removed(&removed)),
+                    Err(error) => self.set_flash(error),
+                }
+                self.refresh_status()?;
+                self.refresh_diagnostics()?;
+                if self.config.sites.list.is_empty() {
+                    self.sites_state.select(None);
+                } else if let Some(index) = self.sites_state.selected() {
+                    let next = index.min(self.config.sites.list.len() - 1);
+                    self.sites_state.select(Some(next));
+                }
+            }
+            Ok(SiteMutation::NotFound(s)) => self.set_flash(self.i18n.site_not_found(&s)),
+            Ok(_) => {}
+            Err(error) => self.set_flash(error),
+        }
+        Ok(())
+    }
+
+    fn render_remove_flow(&self, frame: &mut Frame) {
+        let Some(RemoveConfirmFlow::Typing { site, typed }) = &self.remove_flow else {
+            return;
+        };
+
+        let area = centered_rect(68, 35, frame.area());
+        frame.render_widget(Clear, area);
+        frame.render_widget(
+            Paragraph::new(vec![
+                Line::from(Span::styled(
+                    self.i18n.remove_confirm_prompt(site),
+                    Style::default()
+                        .fg(Color::Rgb(241, 203, 126))
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    typed.clone(),
+                    Style::default()
+                        .fg(Color::Rgb(231, 223, 201))
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Line::from(""),
+                Line::from(Span::styled(
+                    match self.i18n.language() {
+                        Language::Es => "Enter para confirmar · Esc para cancelar",
+                        Language::En => "Enter to confirm · Esc to cancel",
+                    },
+                    Style::default().fg(Color::Rgb(190, 197, 208)),
+                )),
+            ])
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(match self.i18n.language() {
+                        Language::Es => "Confirmar eliminación",
+                        Language::En => "Confirm removal",
+                    }),
+            )
+            .alignment(Alignment::Left),
+            area,
+        );
     }
 
     pub fn perform_pending_actions(&mut self) -> Result<()> {

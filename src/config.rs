@@ -39,6 +39,7 @@ pub struct SystemConfig {
     pub hosts: HostsConfig,
     pub logging: LoggingConfig,
     pub daemon: DaemonConfig,
+    pub monk_mode: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -268,6 +269,7 @@ impl SystemConfig {
             hosts: config.hosts,
             logging: config.logging,
             daemon: config.daemon,
+            monk_mode: false,
         }
         .normalized()
     }

@@ -57,3 +57,11 @@ pub fn load() -> std::io::Result<Vec<JournalEntry>> {
     entries.reverse(); // más recientes primero
     Ok(entries)
 }
+
+pub fn count_today() -> usize {
+    let today = Local::now().date_naive();
+    load().unwrap_or_default()
+        .into_iter()
+        .filter(|e| e.timestamp.date_naive() == today)
+        .count()
+}

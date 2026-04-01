@@ -29,6 +29,7 @@ pub struct StatusSnapshot {
     pub hosts_blocked: bool,
     pub next_transition: Option<DateTime<Local>>,
     pub site_count: usize,
+    pub monk_mode: bool,
 }
 
 pub fn run_daemon(config: &SystemConfig) -> Result<()> {
@@ -43,7 +44,7 @@ pub fn run_daemon(config: &SystemConfig) -> Result<()> {
 
 pub fn run(config: &SystemConfig) -> Result<SyncAction> {
     let now = Local::now();
-    let should_block = scheduler::is_block_time(&config.schedule, &now);
+    let should_block = config.monk_mode || scheduler::is_block_time(&config.schedule, &now);
 
     let hosts_path = &config.hosts.file;
     let content = hosts::read_hosts(hosts_path)?;
@@ -140,6 +141,7 @@ pub fn status_snapshot(config: &SystemConfig) -> Result<StatusSnapshot> {
         hosts_blocked: hosts::is_blocked(&content, &config.hosts.marker),
         next_transition: scheduler::next_transition(&config.schedule, &now),
         site_count: config.sites.list.len(),
+        monk_mode: config.monk_mode,
     })
 }
 

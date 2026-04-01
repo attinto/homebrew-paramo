@@ -10,6 +10,7 @@ mod launchd;
 mod logging;
 mod paths;
 mod preferences;
+mod report;
 mod scheduler;
 mod tui;
 
@@ -47,13 +48,29 @@ enum Command {
     Lang(LanguageCommand),
     #[command(subcommand)]
     Config(ConfigCommand),
+    #[command(subcommand)]
+    Monje(MonjeCommand),
+    #[command(about = "Muestra el reporte semanal de distracciones")]
+    Reporte,
 }
 
 #[derive(Subcommand)]
 enum SiteCommand {
     List,
     Add { site: String },
-    Remove { site: String },
+    Remove {
+        site: String,
+        #[arg(long, help = "Confirma la eliminación del sitio")]
+        confirmar: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum MonjeCommand {
+    #[command(about = "Activa el Modo Monje: bloqueo total sin excepciones")]
+    Activar,
+    #[command(about = "Desactiva el Modo Monje")]
+    Desactivar,
 }
 
 #[derive(Subcommand)]
@@ -160,7 +177,11 @@ fn main() -> Result<()> {
                     _ => {}
                 }
             }
-            SiteCommand::Remove { site } => {
+            SiteCommand::Remove { site, confirmar } => {
+                if !confirmar {
+                    println!("{}", i18n.remove_confirm_required(&site));
+                    return Ok(());
+                }
                 match config.remove_site(&site).map_err(anyhow::Error::msg)? {
                     SiteMutation::Removed(site) => {
                         config.save_active()?;
@@ -220,6 +241,25 @@ fn main() -> Result<()> {
                 println!("{}", content);
             }
         },
+        Some(Command::Monje(command)) => match command {
+            MonjeCommand::Activar => {
+                require_root(i18n)?;
+                config.monk_mode = true;
+                config.save_active()?;
+                ipc::send_command("sync").map_err(anyhow::Error::msg)?;
+                println!("{}", i18n.monk_mode_activated());
+            }
+            MonjeCommand::Desactivar => {
+                require_root(i18n)?;
+                config.monk_mode = false;
+                config.save_active()?;
+                ipc::send_command("sync").map_err(anyhow::Error::msg)?;
+                println!("{}", i18n.monk_mode_deactivated());
+            }
+        },
+        Some(Command::Reporte) => {
+            print!("{}", report::weekly_report());
+        }
         None => {
             if std::io::stdout().is_terminal() {
                 tui::run(&mut config, &mut preferences)?;

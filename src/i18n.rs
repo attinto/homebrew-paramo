@@ -591,4 +591,101 @@ impl I18n {
             Language::En => "breathe out...",
         }
     }
+
+    // --- Modo Monje ---
+
+    pub fn monk_mode_activated(self) -> &'static str {
+        match self.language {
+            Language::Es => "Modo Monje activado. Bloqueo total durante todo el día.",
+            Language::En => "Monk Mode activated. Full block all day long.",
+        }
+    }
+
+    pub fn monk_mode_deactivated(self) -> &'static str {
+        match self.language {
+            Language::Es => "Modo Monje desactivado.",
+            Language::En => "Monk Mode deactivated.",
+        }
+    }
+
+    pub fn monk_mode_no_unblock(self) -> &'static str {
+        match self.language {
+            Language::Es => "Modo Monje activo: no se puede desbloquear. ¡Resiste!",
+            Language::En => "Monk Mode is active: unblocking is not allowed. Hold on!",
+        }
+    }
+
+    pub fn monk_mode_label(self) -> &'static str {
+        match self.language {
+            Language::Es => "Modo Monje",
+            Language::En => "Monk Mode",
+        }
+    }
+
+    pub fn monk_mode_active_label(self) -> &'static str {
+        match self.language {
+            Language::Es => "ACTIVO — bloqueo total 24h",
+            Language::En => "ACTIVE — full block 24h",
+        }
+    }
+
+    pub fn monk_mode_inactive_label(self) -> &'static str {
+        match self.language {
+            Language::Es => "inactivo",
+            Language::En => "inactive",
+        }
+    }
+
+    pub fn monk_mode_toggle_hint(self) -> &'static str {
+        match self.language {
+            Language::Es => "m  Activar/desactivar Modo Monje",
+            Language::En => "m  Toggle Monk Mode",
+        }
+    }
+
+    // --- Dificultad progresiva ---
+
+    pub fn unlock_attempt_warning(self, attempt: usize) -> String {
+        match self.language {
+            Language::Es => match attempt {
+                1 => "Segunda vez hoy. Espera 3 minutos.".to_string(),
+                2 => "Tercera vez. Espera 10 minutos.".to_string(),
+                n => format!("Intento {}. Espera 30 minutos.", n + 1),
+            },
+            Language::En => match attempt {
+                1 => "Second time today. Wait 3 minutes.".to_string(),
+                2 => "Third time. Wait 10 minutes.".to_string(),
+                n => format!("Attempt {}. Wait 30 minutes.", n + 1),
+            },
+        }
+    }
+
+    // --- Confirmación eliminación de sitio ---
+
+    pub fn remove_confirm_required(self, site: &str) -> String {
+        match self.language {
+            Language::Es => format!(
+                "Usa --confirmar para eliminar '{}' de la lista.",
+                site
+            ),
+            Language::En => format!(
+                "Use --confirmar to remove '{}' from the list.",
+                site
+            ),
+        }
+    }
+
+    pub fn remove_confirm_prompt(self, site: &str) -> String {
+        match self.language {
+            Language::Es => format!("Escribe '{}' para confirmar la eliminación", site),
+            Language::En => format!("Type '{}' to confirm removal", site),
+        }
+    }
+
+    pub fn remove_confirm_wrong(self) -> &'static str {
+        match self.language {
+            Language::Es => "El nombre no coincide. Eliminación cancelada.",
+            Language::En => "Name mismatch. Removal cancelled.",
+        }
+    }
 }
