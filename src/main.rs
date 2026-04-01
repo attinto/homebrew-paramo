@@ -5,6 +5,7 @@ mod hosts;
 mod i18n;
 mod ipc;
 mod install;
+mod journal;
 mod launchd;
 mod logging;
 mod paths;

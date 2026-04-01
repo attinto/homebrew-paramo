@@ -1,0 +1,125 @@
+# English translations
+# Parameters are written as {0}, {1}, {2}...
+
+# General status
+blocked_label        = "BLOCKED"
+unblocked_label      = "UNBLOCKED"
+schedule_active_label   = "Blocking schedule is active"
+schedule_inactive_label = "Outside the blocking schedule"
+next_change_label    = "Next change"
+relative_time_label  = "from now"
+configured_sites_label = "Configured sites"
+status_title         = "Status"
+subtitle             = "Isolate to build"
+
+# Weekdays
+weekday_mon = "Monday"
+weekday_tue = "Tuesday"
+weekday_wed = "Wednesday"
+weekday_thu = "Thursday"
+weekday_fri = "Friday"
+weekday_sat = "Saturday"
+weekday_sun = "Sunday"
+
+# Action messages
+requires_root     = "This action requires administrator privileges. Run it with sudo."
+blocked_now       = "Manual block applied."
+unblocked_now     = "Manual block removed."
+unblock_cancelled = "Unblock cancelled. Well done!"
+
+# Parametrized messages (uses {0}, {1}, {2} as placeholders)
+language_updated    = "Language updated to {0}."
+current_language    = "Current language: {0} ({1})"
+site_added          = "Site added: {0}"
+site_removed        = "Site removed: {0}"
+site_already_present = "Site was already in the list: {0}"
+site_not_found      = "Site was not in the list: {0}"
+unsupported_language = "Unsupported language: {0}"
+schedule_updated    = "Schedule updated: {0}:00 -> {1}:00 | weekends: {2}"
+schedule_summary    = "Schedule: {0}:00 -> {1}:00 | weekends: {2}"
+
+# Installation
+install_started   = "Installing PARAMO..."
+install_completed = "Installation completed."
+uninstall_started   = "Uninstalling PARAMO..."
+uninstall_completed = "Uninstall completed."
+install_note = "System install: run `sudo paramo install` to create `/etc/paramo` and register the daemon."
+
+# TUI tabs
+home_tab        = "Home"
+sites_tab       = "Sites"
+schedule_tab    = "Schedule"
+settings_tab    = "Settings"
+diagnostics_tab = "Diagnostics"
+wall_tab        = "Wall"
+exit_tab        = "Exit"
+
+# Diagnostics
+doctor_title        = "Diagnostics"
+diagnostics_refresh = "Press g to rerun diagnostics."
+ok_label      = "OK"
+warning_label = "WARN"
+error_label   = "ERROR"
+
+# Home screen
+home_actions       = "Quick actions"
+home_action_block   = "b  Block now"
+home_action_unblock = "u  Unblock now"
+home_action_refresh = "r  Refresh status"
+home_action_exit    = "Exit  Exit tab + Enter or q"
+
+# Site management
+site_empty         = "No sites configured."
+add_site_prompt    = "Add site: type a domain and press Enter"
+selected_label     = "Selected"
+site_add_action    = "a  Add site"
+site_remove_action = "d  Remove site"
+site_move_selection = "↑ ↓  Move selection"
+manage_label       = "Manage"
+
+# Schedule
+schedule_controls = "Use up/down to select a field. Left/right changes the value."
+weekends_label    = "Weekends"
+weekends_on       = "on"
+weekends_off      = "off"
+start_label       = "Start"
+end_label         = "End"
+controls_label    = "Controls"
+
+# Settings
+language_label      = "Language"
+language_change_hint = "← → changes the language"
+
+# Exit screen
+exit_screen_title = "Exit PARAMO"
+exit_screen_body  = "Press Enter to close the TUI."
+exit_screen_hint  = "You can also quit at any time with q."
+
+# Header / shortcuts
+header_nav_hint     = "Tab  Navigate"
+header_confirm_hint = "Enter  Confirm"
+header_quit_hint    = "q  Quit"
+tui_hint = "Use Tab/arrows to navigate, a to add, d to delete, b/u to block, q to quit or Exit tab + Enter"
+
+# Wall of shame
+wall_title = "Wall of Shame"
+wall_empty = "No entries yet. Keep it up!"
+
+# Unblock flow
+countdown_title    = "Are you sure you want to unblock?"
+countdown_subtitle = "Take a moment before deciding"
+countdown_hint     = "Esc to cancel"
+
+reason_prompt_title   = "Why do you want to unblock?"
+reason_prompt_hint    = "Enter to confirm · Esc to cancel"
+reason_required       = "Reason cannot be empty."
+reason_required_label = "Reason (required)"
+
+final_countdown_title        = "Reflect. Almost there."
+final_countdown_reason_label = "Your reason"
+
+breath_in  = "breathe in..."
+breath_out = "breathe out..."
+
+# Generic input
+input_label = "Input"

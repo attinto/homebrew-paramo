@@ -1,5 +1,23 @@
 use chrono::Weekday;
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
+use toml::Table;
+
+// Los archivos TOML se embeben en el binario en tiempo de compilación.
+// Se parsean una sola vez al primer uso gracias a OnceLock.
+static TRANSLATIONS: OnceLock<[Table; 2]> = OnceLock::new();
+
+fn translations() -> &'static [Table; 2] {
+    TRANSLATIONS.get_or_init(|| {
+        let es: Table = include_str!("../locales/es.toml")
+            .parse()
+            .expect("locales/es.toml debe ser TOML válido");
+        let en: Table = include_str!("../locales/en.toml")
+            .parse()
+            .expect("locales/en.toml debe ser TOML válido");
+        [es, en]
+    })
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -47,450 +65,162 @@ impl I18n {
         self.language
     }
 
-    pub fn blocked_label(self) -> &'static str {
-        match self.language {
-            Language::Es => "BLOQUEADO",
-            Language::En => "BLOCKED",
-        }
+    // Devuelve la cadena estática para la clave dada en el idioma activo.
+    // Si la clave no existe, devuelve "???" — esto no debería ocurrir nunca
+    // siempre que los archivos locales estén completos.
+    fn t(self, key: &str) -> &'static str {
+        let table = match self.language {
+            Language::Es => &translations()[0],
+            Language::En => &translations()[1],
+        };
+        table
+            .get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or("???")
     }
 
-    pub fn unblocked_label(self) -> &'static str {
-        match self.language {
-            Language::Es => "DESBLOQUEADO",
-            Language::En => "UNBLOCKED",
+    // Sustituye los marcadores {0}, {1}, {2} de una plantilla de traducción.
+    fn format(self, key: &str, args: &[&str]) -> String {
+        let mut result = self.t(key).to_string();
+        for (i, arg) in args.iter().enumerate() {
+            result = result.replace(&format!("{{{}}}", i), arg);
         }
+        result
     }
 
-    pub fn schedule_active_label(self) -> &'static str {
-        match self.language {
-            Language::Es => "Horario de bloqueo activo",
-            Language::En => "Blocking schedule is active",
-        }
-    }
+    // --- Cadenas sin parámetros ---
 
-    pub fn schedule_inactive_label(self) -> &'static str {
-        match self.language {
-            Language::Es => "Fuera del horario de bloqueo",
-            Language::En => "Outside the blocking schedule",
-        }
-    }
+    pub fn blocked_label(self) -> &'static str { self.t("blocked_label") }
+    pub fn unblocked_label(self) -> &'static str { self.t("unblocked_label") }
+    pub fn schedule_active_label(self) -> &'static str { self.t("schedule_active_label") }
+    pub fn schedule_inactive_label(self) -> &'static str { self.t("schedule_inactive_label") }
+    pub fn next_change_label(self) -> &'static str { self.t("next_change_label") }
+    pub fn relative_time_label(self) -> &'static str { self.t("relative_time_label") }
+    pub fn configured_sites_label(self) -> &'static str { self.t("configured_sites_label") }
+    pub fn status_title(self) -> &'static str { self.t("status_title") }
+    pub fn subtitle(self) -> &'static str { self.t("subtitle") }
+    pub fn requires_root(self) -> &'static str { self.t("requires_root") }
+    pub fn blocked_now(self) -> &'static str { self.t("blocked_now") }
+    pub fn unblocked_now(self) -> &'static str { self.t("unblocked_now") }
+    pub fn unblock_cancelled(self) -> &'static str { self.t("unblock_cancelled") }
+    pub fn install_started(self) -> &'static str { self.t("install_started") }
+    pub fn install_completed(self) -> &'static str { self.t("install_completed") }
+    pub fn uninstall_started(self) -> &'static str { self.t("uninstall_started") }
+    pub fn uninstall_completed(self) -> &'static str { self.t("uninstall_completed") }
+    pub fn install_note(self) -> &'static str { self.t("install_note") }
+    pub fn home_tab(self) -> &'static str { self.t("home_tab") }
+    pub fn sites_tab(self) -> &'static str { self.t("sites_tab") }
+    pub fn schedule_tab(self) -> &'static str { self.t("schedule_tab") }
+    pub fn settings_tab(self) -> &'static str { self.t("settings_tab") }
+    pub fn diagnostics_tab(self) -> &'static str { self.t("diagnostics_tab") }
+    pub fn wall_tab(self) -> &'static str { self.t("wall_tab") }
+    pub fn exit_tab(self) -> &'static str { self.t("exit_tab") }
+    pub fn doctor_title(self) -> &'static str { self.t("doctor_title") }
+    pub fn diagnostics_refresh(self) -> &'static str { self.t("diagnostics_refresh") }
+    pub fn ok(self) -> &'static str { self.t("ok_label") }
+    pub fn warning(self) -> &'static str { self.t("warning_label") }
+    pub fn error(self) -> &'static str { self.t("error_label") }
+    pub fn home_actions(self) -> &'static str { self.t("home_actions") }
+    pub fn home_action_block(self) -> &'static str { self.t("home_action_block") }
+    pub fn home_action_unblock(self) -> &'static str { self.t("home_action_unblock") }
+    pub fn home_action_refresh(self) -> &'static str { self.t("home_action_refresh") }
+    pub fn home_action_exit(self) -> &'static str { self.t("home_action_exit") }
+    pub fn site_empty(self) -> &'static str { self.t("site_empty") }
+    pub fn add_site_prompt(self) -> &'static str { self.t("add_site_prompt") }
+    pub fn selected_label(self) -> &'static str { self.t("selected_label") }
+    pub fn site_add_action(self) -> &'static str { self.t("site_add_action") }
+    pub fn site_remove_action(self) -> &'static str { self.t("site_remove_action") }
+    pub fn site_move_selection(self) -> &'static str { self.t("site_move_selection") }
+    pub fn manage_label(self) -> &'static str { self.t("manage_label") }
+    pub fn schedule_controls(self) -> &'static str { self.t("schedule_controls") }
+    pub fn weekends_label(self) -> &'static str { self.t("weekends_label") }
+    pub fn weekends_on(self) -> &'static str { self.t("weekends_on") }
+    pub fn weekends_off(self) -> &'static str { self.t("weekends_off") }
+    pub fn start_label(self) -> &'static str { self.t("start_label") }
+    pub fn end_label(self) -> &'static str { self.t("end_label") }
+    pub fn controls_label(self) -> &'static str { self.t("controls_label") }
+    pub fn language_label(self) -> &'static str { self.t("language_label") }
+    pub fn language_change_hint(self) -> &'static str { self.t("language_change_hint") }
+    pub fn exit_screen_title(self) -> &'static str { self.t("exit_screen_title") }
+    pub fn exit_screen_body(self) -> &'static str { self.t("exit_screen_body") }
+    pub fn exit_screen_hint(self) -> &'static str { self.t("exit_screen_hint") }
+    pub fn header_nav_hint(self) -> &'static str { self.t("header_nav_hint") }
+    pub fn header_confirm_hint(self) -> &'static str { self.t("header_confirm_hint") }
+    pub fn header_quit_hint(self) -> &'static str { self.t("header_quit_hint") }
+    pub fn tui_hint(self) -> &'static str { self.t("tui_hint") }
+    pub fn wall_title(self) -> &'static str { self.t("wall_title") }
+    pub fn wall_empty(self) -> &'static str { self.t("wall_empty") }
+    pub fn countdown_title(self) -> &'static str { self.t("countdown_title") }
+    pub fn countdown_subtitle(self) -> &'static str { self.t("countdown_subtitle") }
+    pub fn countdown_hint(self) -> &'static str { self.t("countdown_hint") }
+    pub fn reason_prompt_title(self) -> &'static str { self.t("reason_prompt_title") }
+    pub fn reason_prompt_hint(self) -> &'static str { self.t("reason_prompt_hint") }
+    pub fn reason_required(self) -> &'static str { self.t("reason_required") }
+    pub fn reason_required_label(self) -> &'static str { self.t("reason_required_label") }
+    pub fn final_countdown_title(self) -> &'static str { self.t("final_countdown_title") }
+    pub fn final_countdown_reason_label(self) -> &'static str { self.t("final_countdown_reason_label") }
+    pub fn breath_in(self) -> &'static str { self.t("breath_in") }
+    pub fn breath_out(self) -> &'static str { self.t("breath_out") }
+    pub fn input_label(self) -> &'static str { self.t("input_label") }
 
-    pub fn next_change_label(self) -> &'static str {
-        match self.language {
-            Language::Es => "Próximo cambio",
-            Language::En => "Next change",
-        }
-    }
-
-    pub fn relative_time_label(self) -> &'static str {
-        match self.language {
-            Language::Es => "desde ahora",
-            Language::En => "from now",
-        }
-    }
-
-    pub fn configured_sites_label(self) -> &'static str {
-        match self.language {
-            Language::Es => "Sitios configurados",
-            Language::En => "Configured sites",
-        }
-    }
+    // --- Días de la semana ---
 
     pub fn weekday(self, weekday: Weekday) -> &'static str {
-        match self.language {
-            Language::Es => match weekday {
-                Weekday::Mon => "Lunes",
-                Weekday::Tue => "Martes",
-                Weekday::Wed => "Miércoles",
-                Weekday::Thu => "Jueves",
-                Weekday::Fri => "Viernes",
-                Weekday::Sat => "Sábado",
-                Weekday::Sun => "Domingo",
-            },
-            Language::En => match weekday {
-                Weekday::Mon => "Monday",
-                Weekday::Tue => "Tuesday",
-                Weekday::Wed => "Wednesday",
-                Weekday::Thu => "Thursday",
-                Weekday::Fri => "Friday",
-                Weekday::Sat => "Saturday",
-                Weekday::Sun => "Sunday",
-            },
-        }
+        let key = match weekday {
+            Weekday::Mon => "weekday_mon",
+            Weekday::Tue => "weekday_tue",
+            Weekday::Wed => "weekday_wed",
+            Weekday::Thu => "weekday_thu",
+            Weekday::Fri => "weekday_fri",
+            Weekday::Sat => "weekday_sat",
+            Weekday::Sun => "weekday_sun",
+        };
+        self.t(key)
     }
 
-    pub fn requires_root(self) -> &'static str {
-        match self.language {
-            Language::Es => "Esta acción requiere permisos de administrador. Ejecútala con sudo.",
-            Language::En => "This action requires administrator privileges. Run it with sudo.",
-        }
-    }
-
-    pub fn blocked_now(self) -> &'static str {
-        match self.language {
-            Language::Es => "Bloqueo manual aplicado.",
-            Language::En => "Manual block applied.",
-        }
-    }
-
-    pub fn unblocked_now(self) -> &'static str {
-        match self.language {
-            Language::Es => "Bloqueo manual retirado.",
-            Language::En => "Manual block removed.",
-        }
-    }
+    // --- Cadenas con parámetros ---
 
     pub fn language_updated(self, language: Language) -> String {
-        match self.language {
-            Language::Es => format!("Idioma actualizado a {}.", language.native_name()),
-            Language::En => format!("Language updated to {}.", language.native_name()),
-        }
+        self.format("language_updated", &[language.native_name()])
     }
 
     pub fn current_language(self, language: Language) -> String {
-        match self.language {
-            Language::Es => format!(
-                "Idioma actual: {} ({})",
-                language.native_name(),
-                language.code()
-            ),
-            Language::En => format!(
-                "Current language: {} ({})",
-                language.native_name(),
-                language.code()
-            ),
-        }
+        self.format("current_language", &[language.native_name(), language.code()])
     }
 
     pub fn site_added(self, site: &str) -> String {
-        match self.language {
-            Language::Es => format!("Sitio añadido: {}", site),
-            Language::En => format!("Site added: {}", site),
-        }
+        self.format("site_added", &[site])
     }
 
     pub fn site_removed(self, site: &str) -> String {
-        match self.language {
-            Language::Es => format!("Sitio eliminado: {}", site),
-            Language::En => format!("Site removed: {}", site),
-        }
+        self.format("site_removed", &[site])
     }
 
     pub fn site_already_present(self, site: &str) -> String {
-        match self.language {
-            Language::Es => format!("El sitio ya estaba en la lista: {}", site),
-            Language::En => format!("Site was already in the list: {}", site),
-        }
+        self.format("site_already_present", &[site])
     }
 
     pub fn site_not_found(self, site: &str) -> String {
-        match self.language {
-            Language::Es => format!("El sitio no estaba en la lista: {}", site),
-            Language::En => format!("Site was not in the list: {}", site),
-        }
-    }
-
-    pub fn schedule_updated(self, start: u8, end: u8, weekends: bool) -> String {
-        match self.language {
-            Language::Es => format!(
-                "Horario actualizado: {:02}:00 -> {:02}:00 | fines de semana: {}",
-                start,
-                end,
-                self.on_off_spanish(weekends)
-            ),
-            Language::En => format!(
-                "Schedule updated: {:02}:00 -> {:02}:00 | weekends: {}",
-                start,
-                end,
-                self.on_off_english(weekends)
-            ),
-        }
-    }
-
-    pub fn schedule_summary(self, start: u8, end: u8, weekends: bool) -> String {
-        match self.language {
-            Language::Es => format!(
-                "Horario: {:02}:00 -> {:02}:00 | fines de semana: {}",
-                start,
-                end,
-                self.on_off_spanish(weekends)
-            ),
-            Language::En => format!(
-                "Schedule: {:02}:00 -> {:02}:00 | weekends: {}",
-                start,
-                end,
-                self.on_off_english(weekends)
-            ),
-        }
-    }
-
-    pub fn install_started(self) -> &'static str {
-        match self.language {
-            Language::Es => "Instalando PARAMO...",
-            Language::En => "Installing PARAMO...",
-        }
-    }
-
-    pub fn install_completed(self) -> &'static str {
-        match self.language {
-            Language::Es => "Instalación completada.",
-            Language::En => "Installation completed.",
-        }
-    }
-
-    pub fn uninstall_started(self) -> &'static str {
-        match self.language {
-            Language::Es => "Desinstalando PARAMO...",
-            Language::En => "Uninstalling PARAMO...",
-        }
-    }
-
-    pub fn uninstall_completed(self) -> &'static str {
-        match self.language {
-            Language::Es => "Desinstalación completada.",
-            Language::En => "Uninstall completed.",
-        }
-    }
-
-    pub fn doctor_title(self) -> &'static str {
-        match self.language {
-            Language::Es => "Diagnóstico",
-            Language::En => "Diagnostics",
-        }
-    }
-
-    pub fn home_tab(self) -> &'static str {
-        match self.language {
-            Language::Es => "Inicio",
-            Language::En => "Home",
-        }
-    }
-
-    pub fn sites_tab(self) -> &'static str {
-        match self.language {
-            Language::Es => "Sitios",
-            Language::En => "Sites",
-        }
-    }
-
-    pub fn schedule_tab(self) -> &'static str {
-        match self.language {
-            Language::Es => "Horario",
-            Language::En => "Schedule",
-        }
-    }
-
-    pub fn settings_tab(self) -> &'static str {
-        match self.language {
-            Language::Es => "Ajustes",
-            Language::En => "Settings",
-        }
-    }
-
-    pub fn diagnostics_tab(self) -> &'static str {
-        match self.language {
-            Language::Es => "Diagnóstico",
-            Language::En => "Diagnostics",
-        }
-    }
-
-    pub fn exit_tab(self) -> &'static str {
-        match self.language {
-            Language::Es => "Salir",
-            Language::En => "Exit",
-        }
-    }
-
-    pub fn diagnostics_refresh(self) -> &'static str {
-        match self.language {
-            Language::Es => "Pulsa g para relanzar el diagnóstico.",
-            Language::En => "Press g to rerun diagnostics.",
-        }
-    }
-
-    pub fn tui_hint(self) -> &'static str {
-        match self.language {
-            Language::Es => "Tab/cursor para navegar, a para añadir, d para borrar, b/u para bloquear, q para salir o pestaña Salir + Enter",
-            Language::En => "Use Tab/arrows to navigate, a to add, d to delete, b/u to block, q to quit or Exit tab + Enter",
-        }
-    }
-
-    pub fn add_site_prompt(self) -> &'static str {
-        match self.language {
-            Language::Es => "Añadir sitio: escribe un dominio y pulsa Enter",
-            Language::En => "Add site: type a domain and press Enter",
-        }
-    }
-
-    pub fn site_empty(self) -> &'static str {
-        match self.language {
-            Language::Es => "No hay sitios configurados.",
-            Language::En => "No sites configured.",
-        }
-    }
-
-    pub fn language_label(self) -> &'static str {
-        match self.language {
-            Language::Es => "Idioma",
-            Language::En => "Language",
-        }
-    }
-
-    pub fn ok(self) -> &'static str {
-        match self.language {
-            Language::Es => "OK",
-            Language::En => "OK",
-        }
-    }
-
-    pub fn warning(self) -> &'static str {
-        match self.language {
-            Language::Es => "AVISO",
-            Language::En => "WARN",
-        }
-    }
-
-    pub fn error(self) -> &'static str {
-        match self.language {
-            Language::Es => "ERROR",
-            Language::En => "ERROR",
-        }
-    }
-
-    pub fn home_actions(self) -> &'static str {
-        match self.language {
-            Language::Es => "Acciones rápidas",
-            Language::En => "Quick actions",
-        }
-    }
-
-    pub fn home_action_block(self) -> &'static str {
-        match self.language {
-            Language::Es => "b  Bloquear ahora",
-            Language::En => "b  Block now",
-        }
-    }
-
-    pub fn home_action_unblock(self) -> &'static str {
-        match self.language {
-            Language::Es => "u  Desbloquear ahora",
-            Language::En => "u  Unblock now",
-        }
-    }
-
-    pub fn home_action_refresh(self) -> &'static str {
-        match self.language {
-            Language::Es => "r  Recargar estado",
-            Language::En => "r  Refresh status",
-        }
-    }
-
-    pub fn home_action_exit(self) -> &'static str {
-        match self.language {
-            Language::Es => "Salir  Pestaña Salir + Enter o q",
-            Language::En => "Exit  Exit tab + Enter or q",
-        }
-    }
-
-    pub fn exit_screen_title(self) -> &'static str {
-        match self.language {
-            Language::Es => "Salir de PARAMO",
-            Language::En => "Exit PARAMO",
-        }
-    }
-
-    pub fn exit_screen_body(self) -> &'static str {
-        match self.language {
-            Language::Es => "Pulsa Enter para cerrar la TUI.",
-            Language::En => "Press Enter to close the TUI.",
-        }
-    }
-
-    pub fn exit_screen_hint(self) -> &'static str {
-        match self.language {
-            Language::Es => "También puedes salir en cualquier momento con q.",
-            Language::En => "You can also quit at any time with q.",
-        }
-    }
-
-    pub fn header_nav_hint(self) -> &'static str {
-        match self.language {
-            Language::Es => "Tab  Navegar",
-            Language::En => "Tab  Navigate",
-        }
-    }
-
-    pub fn header_confirm_hint(self) -> &'static str {
-        match self.language {
-            Language::Es => "Enter  Confirmar",
-            Language::En => "Enter  Confirm",
-        }
-    }
-
-    pub fn header_quit_hint(self) -> &'static str {
-        match self.language {
-            Language::Es => "q  Salir",
-            Language::En => "q  Quit",
-        }
-    }
-
-    pub fn schedule_controls(self) -> &'static str {
-        match self.language {
-            Language::Es => {
-                "Cursores arriba/abajo seleccionan campo. Izquierda/derecha cambia valor."
-            }
-            Language::En => "Use up/down to select a field. Left/right changes the value.",
-        }
-    }
-
-    pub fn weekends_label(self) -> &'static str {
-        match self.language {
-            Language::Es => "Fines de semana",
-            Language::En => "Weekends",
-        }
-    }
-
-    pub fn start_label(self) -> &'static str {
-        match self.language {
-            Language::Es => "Inicio",
-            Language::En => "Start",
-        }
-    }
-
-    pub fn end_label(self) -> &'static str {
-        match self.language {
-            Language::Es => "Fin",
-            Language::En => "End",
-        }
-    }
-
-    pub fn install_note(self) -> &'static str {
-        match self.language {
-            Language::Es => "Instalación del sistema: ejecuta `sudo paramo install` para crear `/etc/paramo` y registrar el daemon.",
-            Language::En => "System install: run `sudo paramo install` to create `/etc/paramo` and register the daemon.",
-        }
+        self.format("site_not_found", &[site])
     }
 
     pub fn unsupported_language(self, value: &str) -> String {
-        match self.language {
-            Language::Es => format!("Idioma no soportado: {}", value),
-            Language::En => format!("Unsupported language: {}", value),
-        }
+        self.format("unsupported_language", &[value])
     }
 
-    pub fn on_off_spanish(self, value: bool) -> &'static str {
-        if value {
-            "activados"
-        } else {
-            "desactivados"
-        }
+    pub fn schedule_updated(self, start: u8, end: u8, weekends: bool) -> String {
+        let weekends_str = if weekends { self.weekends_on() } else { self.weekends_off() };
+        self.format(
+            "schedule_updated",
+            &[&format!("{:02}", start), &format!("{:02}", end), weekends_str],
+        )
     }
 
-    pub fn on_off_english(self, value: bool) -> &'static str {
-        if value {
-            "on"
-        } else {
-            "off"
-        }
+    pub fn schedule_summary(self, start: u8, end: u8, weekends: bool) -> String {
+        let weekends_str = if weekends { self.weekends_on() } else { self.weekends_off() };
+        self.format(
+            "schedule_summary",
+            &[&format!("{:02}", start), &format!("{:02}", end), weekends_str],
+        )
     }
 }
