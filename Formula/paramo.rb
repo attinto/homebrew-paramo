@@ -3,9 +3,9 @@ class Paramo < Formula
   homepage "https://github.com/attinto/homebrew-paramo"
   url "https://github.com/attinto/homebrew-paramo.git",
       tag: "v0.1.0",
-      revision: "25fc230f10c0caddabaca13b3087e271ac4200cd"
+      revision: "cf77ff47f92e02991beeac660c664f652ed5d82a"
   license "MIT"
-  head "https://github.com/attinto/homebrew-paramo.git", branch: "main"
+  head "https://github.com/attinto/homebrew-paramo.git", branch: "master"
 
   depends_on "rust" => :build
 
