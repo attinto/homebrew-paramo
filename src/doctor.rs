@@ -153,7 +153,7 @@ fn legacy_installation_diagnostic(i18n: I18n) -> Result<Option<Diagnostic>> {
     )))
 }
 
-fn plist_diagnostic(config: &SystemConfig, i18n: I18n) -> Diagnostic {
+fn plist_diagnostic(_config: &SystemConfig, i18n: I18n) -> Diagnostic {
     let plist_path = Path::new(paths::PLIST_DEST);
     if !plist_path.exists() {
         return diagnostic(
@@ -187,13 +187,11 @@ fn plist_diagnostic(config: &SystemConfig, i18n: I18n) -> Diagnostic {
     };
 
     let label = launchd::plist_value(&content, "Label");
-    let interval = launchd::plist_integer(&content, "StartInterval");
     let args = launchd::plist_program_arguments(&content);
     let binary = args.first().cloned();
     let run_argument_ok = args.get(1).is_some_and(|value| value == "run");
 
     if label.as_deref() != Some(paths::LAUNCHD_LABEL)
-        || interval != Some(config.daemon.interval_seconds)
         || !run_argument_ok
     {
         return diagnostic(
@@ -205,8 +203,8 @@ fn plist_diagnostic(config: &SystemConfig, i18n: I18n) -> Diagnostic {
                 "The launchd plist does not match the current configuration",
             ),
             format!(
-                "Label={:?}, StartInterval={:?}, ProgramArguments={:?}",
-                label, interval, args
+                "Label={:?}, ProgramArguments={:?}",
+                label, args
             ),
             Some(text(
                 i18n,
@@ -382,8 +380,8 @@ fn hosts_diagnostics(config: &SystemConfig, i18n: I18n) -> Result<Vec<Diagnostic
             format!("{} markers", marker_count),
             Some(text(
                 i18n,
-                "Ejecuta `sudo paramo block` o `sudo paramo unblock` para normalizar el bloque.",
-                "Run `sudo paramo block` or `sudo paramo unblock` to normalize the block.",
+                "Ejecuta `paramo block` o `paramo unblock` para normalizar el bloque.",
+                "Run `paramo block` or `paramo unblock` to normalize the block.",
             )),
         )
     } else {
@@ -424,8 +422,8 @@ fn hosts_diagnostics(config: &SystemConfig, i18n: I18n) -> Result<Vec<Diagnostic
                 ),
                 Some(text(
                     i18n,
-                    "Ejecuta `sudo paramo run` para resincronizar el bloqueo.",
-                    "Run `sudo paramo run` to resync blocking.",
+                    "Ejecuta `paramo block`, `paramo unblock` o cambia la configuración para resincronizar el bloqueo.",
+                    "Run `paramo block`, `paramo unblock`, or change the configuration to resync blocking.",
                 )),
             )
         } else {

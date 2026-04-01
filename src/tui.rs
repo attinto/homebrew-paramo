@@ -772,9 +772,8 @@ impl Dashboard {
 
     fn try_block(&mut self) -> Result<()> {
         match ipc::send_command("block") {
-            Ok(r) if r == "ok" => self.set_flash(self.i18n.blocked_now()),
-            Ok(err) => self.set_flash(err),
-            Err(e) => self.set_flash(e),
+            Ok(()) => self.set_flash(self.i18n.blocked_now()),
+            Err(error) => self.set_flash(error),
         }
         self.refresh_status()?;
         Ok(())
@@ -782,9 +781,8 @@ impl Dashboard {
 
     fn try_unblock(&mut self) -> Result<()> {
         match ipc::send_command("unblock") {
-            Ok(r) if r == "ok" => self.set_flash(self.i18n.unblocked_now()),
-            Ok(err) => self.set_flash(err),
-            Err(e) => self.set_flash(e),
+            Ok(()) => self.set_flash(self.i18n.unblocked_now()),
+            Err(error) => self.set_flash(error),
         }
         self.refresh_status()?;
         Ok(())
@@ -794,8 +792,10 @@ impl Dashboard {
         match self.config.add_site(raw) {
             Ok(SiteMutation::Added(site)) => {
                 self.config.save_active()?;
-                let _ = ipc::send_command("sync");
-                self.set_flash(self.i18n.site_added(&site));
+                match ipc::send_command("sync") {
+                    Ok(()) => self.set_flash(self.i18n.site_added(&site)),
+                    Err(error) => self.set_flash(error),
+                }
                 self.refresh_status()?;
                 self.refresh_diagnostics()?;
                 self.sites_state.select(
@@ -831,8 +831,10 @@ impl Dashboard {
         match self.config.remove_site(&site) {
             Ok(SiteMutation::Removed(site)) => {
                 self.config.save_active()?;
-                let _ = ipc::send_command("sync");
-                self.set_flash(self.i18n.site_removed(&site));
+                match ipc::send_command("sync") {
+                    Ok(()) => self.set_flash(self.i18n.site_removed(&site)),
+                    Err(error) => self.set_flash(error),
+                }
                 self.refresh_status()?;
                 self.refresh_diagnostics()?;
                 if self.config.sites.list.is_empty() {
@@ -868,8 +870,10 @@ impl Dashboard {
         }
 
         self.config.save_active()?;
-        let _ = ipc::send_command("sync");
-        self.set_flash(self.i18n.schedule_updated(start, end, weekends));
+        match ipc::send_command("sync") {
+            Ok(()) => self.set_flash(self.i18n.schedule_updated(start, end, weekends)),
+            Err(error) => self.set_flash(error),
+        }
         self.refresh_status()?;
         self.refresh_diagnostics()?;
 

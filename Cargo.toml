@@ -3,6 +3,9 @@ name = "paramo"
 version = "0.1.0"
 edition = "2021"
 description = "Bloqueador de distracciones para macOS con CLI y TUI"
+license = "MIT"
+repository = "https://github.com/attinto/homebrew-paramo"
+homepage = "https://github.com/attinto/homebrew-paramo"
 
 [dependencies]
 anyhow = "1"

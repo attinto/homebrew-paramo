@@ -122,18 +122,6 @@ pub fn plist_value(content: &str, key: &str) -> Option<String> {
     Some(unescape_xml(value))
 }
 
-pub fn plist_integer(content: &str, key: &str) -> Option<u32> {
-    let key_tag = format!("<key>{key}</key>");
-    let after_key = content.split_once(&key_tag)?.1;
-    let after_integer = after_key.split_once("<integer>")?.1;
-    after_integer
-        .split_once("</integer>")?
-        .0
-        .trim()
-        .parse()
-        .ok()
-}
-
 pub fn plist_program_arguments(content: &str) -> Vec<String> {
     let key_tag = "<key>ProgramArguments</key>";
     let Some(after_key) = content.split_once(key_tag).map(|(_, rest)| rest) else {

@@ -111,18 +111,12 @@ fn main() -> Result<()> {
             print_status(&config, i18n)?;
         }
         Some(Command::Block) => {
-            match ipc::send_command("block") {
-                Ok(r) if r == "ok" => println!("{}", i18n.blocked_now()),
-                Ok(err) => anyhow::bail!("{}", err),
-                Err(e) => anyhow::bail!("{}", e),
-            }
+            ipc::send_command("block").map_err(anyhow::Error::msg)?;
+            println!("{}", i18n.blocked_now());
         }
         Some(Command::Unblock) => {
-            match ipc::send_command("unblock") {
-                Ok(r) if r == "ok" => println!("{}", i18n.unblocked_now()),
-                Ok(err) => anyhow::bail!("{}", err),
-                Err(e) => anyhow::bail!("{}", e),
-            }
+            ipc::send_command("unblock").map_err(anyhow::Error::msg)?;
+            println!("{}", i18n.unblocked_now());
         }
         Some(Command::Doctor) => {
             let diagnostics = doctor::run(&config, i18n)?;
@@ -156,7 +150,7 @@ fn main() -> Result<()> {
                 match config.add_site(&site).map_err(anyhow::Error::msg)? {
                     SiteMutation::Added(site) => {
                         config.save_active()?;
-                        let _ = ipc::send_command("sync");
+                        ipc::send_command("sync").map_err(anyhow::Error::msg)?;
                         println!("{}", i18n.site_added(&site));
                     }
                     SiteMutation::AlreadyPresent(site) => {
@@ -169,7 +163,7 @@ fn main() -> Result<()> {
                 match config.remove_site(&site).map_err(anyhow::Error::msg)? {
                     SiteMutation::Removed(site) => {
                         config.save_active()?;
-                        let _ = ipc::send_command("sync");
+                        ipc::send_command("sync").map_err(anyhow::Error::msg)?;
                         println!("{}", i18n.site_removed(&site));
                     }
                     SiteMutation::NotFound(site) => {
@@ -195,7 +189,7 @@ fn main() -> Result<()> {
                     .set_schedule(args.start, args.end, args.weekends.as_bool())
                     .map_err(anyhow::Error::msg)?;
                 config.save_active()?;
-                let _ = ipc::send_command("sync");
+                ipc::send_command("sync").map_err(anyhow::Error::msg)?;
                 println!(
                     "{}",
                     i18n.schedule_updated(

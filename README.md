@@ -1,87 +1,74 @@
 # PARAMO
 
-PARAMO es un bloqueador de distracciones para macOS escrito en Rust. Gestiona una sección propia dentro de `/etc/hosts`, puede ejecutarse manualmente desde CLI o TUI, y puede quedar instalado como daemon de `launchd` para aplicar el bloqueo por horario sin intervención manual.
+PARAMO es un bloqueador de distracciones para macOS escrito en Rust. Gestiona una sección propia dentro de `/etc/hosts`, ofrece CLI y TUI, y puede quedar instalado como daemon de `launchd` para aplicar el bloqueo por horario sin tener que abrir la app manualmente.
 
-## Estado del proyecto
+## Instalación con Homebrew
 
-El repositorio ya cubre el flujo local completo:
+El objetivo de este repo es funcionar como un tap de Homebrew de un solo repositorio.
 
-- CLI para consultar estado, gestionar sitios, cambiar horario e idioma.
-- TUI interactiva al ejecutar `paramo` sin argumentos.
-- Instalación del sistema con `sudo paramo install`.
-- Diagnóstico real con comprobaciones sobre configuración, `launchd`, `/etc/hosts` y restos de `undistracted`.
-- Migración desde una instalación anterior de `undistracted`.
-
-El empaquetado de Homebrew no está incluido todavía.
-
-## Requisitos
-
-- macOS
-- Rust toolchain estable
-- permisos de administrador para `install`, `uninstall`, `block`, `unblock`, `site add/remove` y `schedule set`
-
-## Compilar
+La experiencia final esperada es:
 
 ```bash
-cargo build --release
+brew tap attinto/paramo
+brew install paramo
+sudo paramo install
+paramo doctor
 ```
 
-El binario queda en:
+También puedes instalarlo en un solo comando:
+
+```bash
+brew install attinto/paramo/paramo
+```
+
+Homebrew instala solo el binario CLI. La integración con `/etc/hosts` y `launchd` sigue siendo un paso explícito aparte:
+
+```bash
+sudo paramo install
+```
+
+Después de eso, las acciones diarias del CLI y de la TUI funcionan sin `sudo`, delegando en el daemon instalado.
+
+## Nombre del repositorio
+
+Para que `brew tap attinto/paramo` funcione con la convención estándar de Homebrew, el repositorio en GitHub debe llamarse:
 
 ```text
-target/release/paramo
+homebrew-paramo
 ```
 
-## Flujo recomendado de prueba local
+Este árbol ya está preparado para ese nombre. Si todavía no has renombrado el repo en GitHub, hazlo antes de publicar el tap.
 
-### 1. Comprobar que el proyecto está sano
+## Actualizar con Homebrew
+
+Para actualizar el binario:
 
 ```bash
-cargo test
-cargo clippy --all-targets -- -D warnings
+brew update
+brew upgrade paramo
 ```
 
-### 2. Ver el estado actual sin instalar nada
+Si una release cambia el daemon, el plist o la configuración del sistema, vuelve a ejecutar:
 
 ```bash
-cargo run -- status
-cargo run -- doctor
+sudo paramo install
 ```
 
-Si todavía no existe `/etc/paramo/config.toml`, PARAMO lo indicará y usará:
+## Desinstalar
 
-- la configuración legacy de `/etc/undistracted/config.toml`, si existe
-- o la plantilla embebida de `config/default.toml`
-
-### 3. Instalar la parte del sistema
+Para quitar la integración de sistema:
 
 ```bash
-sudo ./target/release/paramo install
+sudo paramo uninstall
 ```
 
-Esto hace lo siguiente:
-
-- crea o normaliza `/etc/paramo/config.toml`
-- migra `/etc/undistracted/config.toml` si hace falta
-- limpia el daemon legacy de `undistracted` si sigue presente
-- sincroniza el estado actual en `/etc/hosts`
-- genera y registra `/Library/LaunchDaemons/com.paramo.blocker.plist`
-- valida que `launchd` haya cargado `com.paramo.blocker`
-
-### 4. Verificar la instalación
+Para quitar el binario instalado por Homebrew:
 
 ```bash
-paramo doctor
-paramo status
-sudo launchctl print system/com.paramo.blocker
+brew uninstall paramo
 ```
 
-Deberías ver:
-
-- configuración activa en `/etc/paramo/config.toml`
-- plist válido
-- servicio cargado en `launchd`
-- bloque de hosts sincronizado
+Si quieres eliminar ambas cosas, ejecuta los dos comandos.
 
 ## Uso rápido
 
@@ -90,8 +77,6 @@ Deberías ver:
 ```bash
 paramo
 ```
-
-Si el terminal es interactivo, abre la TUI. Si no lo es, muestra el estado actual.
 
 ### Ver estado
 
@@ -102,29 +87,25 @@ paramo status
 ### Bloquear y desbloquear manualmente
 
 ```bash
-sudo paramo block
-sudo paramo unblock
+paramo block
+paramo unblock
 ```
 
 ### Gestionar sitios
 
 ```bash
 paramo site list
-sudo paramo site add youtube.com
-sudo paramo site remove youtube.com
+paramo site add youtube.com
+paramo site remove youtube.com
 ```
-
-PARAMO normaliza dominios y evita duplicados como `youtube.com` y `www.youtube.com`.
 
 ### Ver y cambiar el horario
 
 ```bash
 paramo schedule show
-sudo paramo schedule set --start 9 --end 18 --weekends off
-sudo paramo schedule set --start 22 --end 8 --weekends on
+paramo schedule set --start 9 --end 18 --weekends off
+paramo schedule set --start 22 --end 8 --weekends on
 ```
-
-Se soportan franjas que cruzan medianoche.
 
 ### Idioma
 
@@ -140,58 +121,101 @@ paramo lang set en
 paramo config show
 ```
 
-Muestra:
-
-- `/etc/paramo/config.toml` si existe
-- `/etc/undistracted/config.toml` si todavía estás en modo legacy
-- o la plantilla embebida si aún no has instalado PARAMO
-
 ### Diagnóstico
 
 ```bash
 paramo doctor
 ```
 
-`doctor` revisa al menos:
+## Desarrollo local
 
-- de dónde sale la configuración efectiva
-- si quedan restos de `undistracted`
-- si el plist de `launchd` existe y coincide con la configuración
-- si el servicio está realmente cargado en `launchd`
-- si la lista de sitios está vacía
-- si el bloque gestionado en `/etc/hosts` está duplicado o desincronizado
-- si conviene revisar DNS over HTTPS en el navegador
+Requisitos:
 
-## Instalación y desinstalación
+- macOS
+- Rust estable
+- Homebrew si quieres probar la fórmula
+- permisos de administrador para `paramo install` y `paramo uninstall`
 
-### Instalar
+Compilar:
 
 ```bash
-sudo paramo install
+cargo build --release
 ```
 
-### Desinstalar
+Validar el proyecto:
 
 ```bash
-sudo paramo uninstall
+cargo test
+cargo clippy --all-targets -- -D warnings
 ```
 
-`uninstall` hace lo siguiente:
+Instalar la parte del sistema desde el binario local:
 
-- descarga y elimina el daemon de PARAMO
-- retira el bloque gestionado de `/etc/hosts`
-- elimina el binario manual si estaba en `/usr/local/bin/paramo`
-- conserva `/etc/paramo/config.toml`
+```bash
+sudo ./target/release/paramo install
+```
+
+Verificar:
+
+```bash
+paramo doctor
+paramo status
+sudo launchctl print system/com.paramo.blocker
+```
+
+## Fórmula Homebrew
+
+La fórmula vive en:
+
+```text
+Formula/paramo.rb
+```
+
+En v1 instala compilando desde source con Rust. No usa `post_install`, no toca `/etc/hosts` ni registra `launchd` por sí sola; esas operaciones siguen en `sudo paramo install`.
+
+## Flujo de releases
+
+Cada release publicada para Homebrew debe seguir este orden:
+
+1. Subir `version` en `Cargo.toml`.
+2. Hacer commit de release.
+3. Crear el tag Git `vX.Y.Z`.
+4. Empujar el commit y el tag al repo `attinto/homebrew-paramo`.
+5. Actualizar `Formula/paramo.rb` para que `tag` y `revision` apunten a esa release.
+6. Hacer commit de la fórmula actualizada en `main`.
+7. Empujar `main`.
+
+Resultado para usuarios:
+
+- `brew update` actualiza el tap.
+- `brew upgrade paramo` instala la nueva versión declarada en la fórmula.
+
+## Probar el tap localmente
+
+Una vez el repositorio exista en GitHub con el nombre definitivo y el tag de la versión esté publicado, puedes validar el flujo así:
+
+```bash
+brew tap attinto/paramo
+brew install --build-from-source attinto/paramo/paramo
+paramo config show
+brew uninstall paramo
+```
+
+Después de ese primer tag, también puedes instalar la fórmula directamente desde este checkout:
+
+```bash
+brew install --build-from-source ./Formula/paramo.rb
+```
 
 ## Configuración
 
-La configuración activa vive en:
+La configuración activa de sistema vive en:
 
 ```text
 /etc/paramo/config.toml
 ```
 
-La plantilla base del repositorio vive en:
+La plantilla base embebida vive en:
 
 ```text
 config/default.toml
@@ -226,47 +250,6 @@ level = "info"
 interval_seconds = 1200
 ```
 
-## TUI
-
-Atajos principales:
-
-- `Tab` y `Shift+Tab` cambian de pestaña
-- `q` sale
-- `b` bloquea ahora
-- `u` desbloquea ahora
-- `r` refresca el estado
-- en `Sitios`: `a` añade y `d` elimina
-- en `Horario`: `↑` y `↓` seleccionan campo, `←` y `→` cambian valor
-- en `Ajustes`: `←` y `→` cambian el idioma
-- en `Diagnóstico`: `g` relanza las comprobaciones
-
-Si la TUI se abre sin `sudo`, las acciones que escriben en el sistema quedan en modo lectura.
-
-## Estructura del proyecto
-
-```text
-src/
-├── main.rs         # CLI y entrada principal
-├── tui.rs          # Interfaz de terminal
-├── config.rs       # Configuración del sistema y normalización
-├── preferences.rs  # Preferencias del usuario
-├── i18n.rs         # Textos ES/EN
-├── blocker.rs      # Sincronización de bloqueo con /etc/hosts
-├── hosts.rs        # Lectura/escritura del bloque gestionado
-├── scheduler.rs    # Reglas de horario y próximo cambio
-├── doctor.rs       # Diagnóstico de instalación y estado
-├── install.rs      # Instalación, migración y uninstall
-├── launchd.rs      # Template y utilidades de launchd
-├── logging.rs      # Logging con fallback limpio
-└── paths.rs        # Rutas del sistema y del usuario
-
-config/
-└── default.toml    # Plantilla embebida de configuración
-
-launchd/
-└── com.paramo.blocker.plist   # Template embebido del daemon
-```
-
 ## Troubleshooting
 
 ### Una web sigue entrando
@@ -275,9 +258,9 @@ PARAMO usa `/etc/hosts`. Algunos navegadores pueden ignorarlo si tienen DNS over
 
 En Firefox:
 
-1. Abre `Settings > Privacy & Security`
-2. Busca `DNS over HTTPS`
-3. Déjalo en `Off`
+1. Abre `Settings > Privacy & Security`.
+2. Busca `DNS over HTTPS`.
+3. Déjalo en `Off`.
 
 ### `doctor` dice que el servicio no está cargado
 
@@ -294,7 +277,7 @@ paramo doctor
 sudo launchctl print system/com.paramo.blocker
 ```
 
-### Quiero resetear la instalación sin perder mi config
+### Quiero resetear la instalación sin perder la config
 
 ```bash
 sudo paramo uninstall

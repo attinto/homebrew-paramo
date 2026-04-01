@@ -32,10 +32,10 @@ pub struct StatusSnapshot {
 }
 
 pub fn run_daemon(config: &SystemConfig) -> Result<()> {
-    crate::ipc::listen();
-    let interval = Duration::from_secs(config.daemon.interval_seconds.max(10) as u64);
+    crate::ipc::listen()?;
     loop {
         let current = SystemConfig::load().unwrap_or_else(|_| config.clone());
+        let interval = Duration::from_secs(current.daemon.interval_seconds.max(10) as u64);
         let _ = run(&current);
         std::thread::sleep(interval);
     }
