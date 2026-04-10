@@ -17,7 +17,7 @@ jobs:
       matrix:
         runner:
           - macos-latest  # arm64 · Apple Silicon (Sequoia)
-          - macos-13      # x86_64 · Intel (Ventura)
+          - macos-12      # x86_64 · Intel (Monterey)
     steps:
       - uses: actions/checkout@v4
 
