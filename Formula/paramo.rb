@@ -3,7 +3,7 @@ class Paramo < Formula
   homepage "https://github.com/attinto/homebrew-paramo"
   url "https://github.com/attinto/homebrew-paramo.git",
       tag: "v0.1.3",
-      revision: "cb297dbb31fc56efed50009077abd722ced69609"
+      revision: "006395bc60d5e725b549e15555d4145dc2ca2c2b"
   license "MIT"
   head "https://github.com/attinto/homebrew-paramo.git", branch: "master"
 
