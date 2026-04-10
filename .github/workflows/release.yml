@@ -21,11 +21,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Patch formula to current tag before tapping
+      - name: Set up tap with patched formula
         env:
           GH_TAG: ${{ github.ref_name }}
           GH_SHA: ${{ github.sha }}
         run: |
+          # Patch the formula in the working directory
           python3 - << 'PYEOF'
           import re, os
           tag = os.environ['GH_TAG']
@@ -38,10 +39,15 @@ jobs:
               f.write(content)
           PYEOF
 
+          # Clone the repo into the Homebrew taps directory, then overwrite
+          # the formula with our patched version (git clone only copies committed
+          # content, so we copy the patched file on top)
+          TAP_DIR="$(brew --repository)/Library/Taps/attinto/homebrew-paramo"
+          git clone "$(pwd)" "$TAP_DIR"
+          cp Formula/paramo.rb "$TAP_DIR/Formula/paramo.rb"
+
       - name: Install formula (bottle mode)
-        run: |
-          brew tap attinto/paramo "$(pwd)"
-          brew install --build-bottle attinto/paramo/paramo
+        run: brew install --build-bottle attinto/paramo/paramo
 
       - name: Create bottle
         run: |
