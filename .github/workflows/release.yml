@@ -21,6 +21,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Patch formula to current tag before tapping
+        env:
+          GH_TAG: ${{ github.ref_name }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          python3 - << 'PYEOF'
+          import re, os
+          tag = os.environ['GH_TAG']
+          sha = os.environ['GH_SHA']
+          with open("Formula/paramo.rb") as f:
+              content = f.read()
+          content = re.sub(r'(tag: ")[^"]*(")',      rf'\g<1>{tag}\g<2>',  content)
+          content = re.sub(r'(revision: ")[^"]*(")', rf'\g<1>{sha}\g<2>', content)
+          with open("Formula/paramo.rb", "w") as f:
+              f.write(content)
+          PYEOF
+
       - name: Install formula (bottle mode)
         run: |
           brew tap attinto/paramo "$(pwd)"
