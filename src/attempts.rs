@@ -65,7 +65,7 @@ pub fn today() -> Result<DayAttempts> {
         .days
         .into_iter()
         .find(|day| day.date == today)
-        .unwrap_or_else(|| DayAttempts {
+        .unwrap_or(DayAttempts {
             date: today,
             initiated: 0,
             completed: 0,
