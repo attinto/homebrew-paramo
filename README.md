@@ -5,10 +5,6 @@ PARAMO es un bloqueador de distracciones para macOS escrito en Rust. Gestiona un
 
 ## Instalación con Homebrew
 
-El objetivo de este repo es funcionar como un tap de Homebrew de un solo repositorio.
-
-La experiencia final esperada es:
-
 ```bash
 brew tap attinto/paramo
 brew install paramo
@@ -22,23 +18,15 @@ También puedes instalarlo en un solo comando:
 brew install attinto/paramo/paramo
 ```
 
-Homebrew instala solo el binario CLI. La integración con `/etc/hosts` y `launchd` sigue siendo un paso explícito aparte:
+Homebrew descarga un binario precompilado (bottle) para tu arquitectura. No necesita compilar Rust. Si no hay bottle disponible para tu versión de macOS, compilará desde fuente como fallback automático.
+
+Homebrew instala solo el binario CLI. La integración con `/etc/hosts` y `launchd` es un paso explícito aparte:
 
 ```bash
 sudo paramo install
 ```
 
 Después de eso, las acciones diarias del CLI y de la TUI funcionan sin `sudo`, delegando en el daemon instalado.
-
-## Nombre del repositorio
-
-Para que `brew tap attinto/paramo` funcione con la convención estándar de Homebrew, el repositorio en GitHub debe llamarse:
-
-```text
-homebrew-paramo
-```
-
-Este árbol ya está preparado para ese nombre. Si todavía no has renombrado el repo en GitHub, hazlo antes de publicar el tap.
 
 ## Actualizar con Homebrew
 
@@ -208,43 +196,44 @@ sudo launchctl print system/com.paramo.blocker
 
 ## Fórmula Homebrew
 
-La fórmula vive en:
+La fórmula vive en `Formula/paramo.rb`.
 
-```text
-Formula/paramo.rb
-```
+Cada release publica bottles precompilados para arm64 (Apple Silicon) e x86_64 (Intel), generados automáticamente por GitHub Actions. Homebrew los descarga directamente sin necesitar Rust instalado.
 
-En v1 instala compilando desde source con Rust. No usa `post_install`, no toca `/etc/hosts` ni registra `launchd` por sí sola; esas operaciones siguen en `sudo paramo install`.
+La fórmula no usa `post_install` ni toca `/etc/hosts` ni registra `launchd` por sí sola. Esas operaciones van en `sudo paramo install`.
 
 ## Flujo de releases
 
-Cada release publicada para Homebrew debe seguir este orden:
+```bash
+# 1. Subir version en Cargo.toml y hacer commit
+git add Cargo.toml && git commit -m "chore: bump version to X.Y.Z"
 
-1. Subir `version` en `Cargo.toml`.
-2. Hacer commit de release.
-3. Crear el tag Git `vX.Y.Z`.
-4. Empujar el commit y el tag al repo `attinto/homebrew-paramo`.
-5. Actualizar `Formula/paramo.rb` para que `tag` y `revision` apunten a esa release.
-6. Hacer commit de la fórmula actualizada en `main`.
-7. Empujar `main`.
+# 2. Crear tag y empujar
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
+git push origin master
+git push origin vX.Y.Z
+```
+
+Al empujar el tag, GitHub Actions compila los bottles para arm64 e Intel, crea el GitHub Release, actualiza `Formula/paramo.rb` con los hashes y hace commit automáticamente. No hay pasos manuales en la fórmula.
 
 Resultado para usuarios:
 
-- `brew update` actualiza el tap.
-- `brew upgrade paramo` instala la nueva versión declarada en la fórmula.
+```bash
+brew update && brew upgrade paramo
+```
 
 ## Probar el tap localmente
 
-Una vez el repositorio exista en GitHub con el nombre definitivo y el tag de la versión esté publicado, puedes validar el flujo así:
+Para validar que la fórmula instala correctamente desde el tap publicado:
 
 ```bash
 brew tap attinto/paramo
-brew install --build-from-source attinto/paramo/paramo
+brew install attinto/paramo/paramo
 paramo config show
 brew uninstall paramo
 ```
 
-Después de ese primer tag, también puedes instalar la fórmula directamente desde este checkout:
+Para probar la fórmula desde un checkout local sin pasar por GitHub (útil durante desarrollo):
 
 ```bash
 brew install --build-from-source ./Formula/paramo.rb

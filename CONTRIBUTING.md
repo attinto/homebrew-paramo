@@ -7,7 +7,6 @@ Thanks for your interest. PARAMO is a small personal tool, but contributions are
 - Bug fixes and edge case handling
 - New languages in `locales/` (just add a new `.toml` file and wire it up in `i18n.rs`)
 - Features that stay in scope: blocking, scheduling, friction flows
-- Better Homebrew formula packaging
 
 What we're probably NOT looking for: Linux/Windows ports, GUI apps, browser extensions, cloud sync, or anything that requires external services.
 
@@ -31,6 +30,16 @@ To test the full daemon flow you'll need macOS and `sudo`.
 3. Run `cargo clippy` and make sure it passes with no warnings
 4. If you're adding a new feature, update `CHANGELOG.md` under `[Unreleased]`
 5. If you're adding/changing strings, edit `locales/es.toml` and `locales/en.toml` — not `i18n.rs`
+
+## Releases and Homebrew bottles
+
+Releases are fully automated. Pushing a `vX.Y.Z` tag triggers a GitHub Actions workflow that:
+
+- Compiles prebuilt bottles for arm64 (Apple Silicon) and x86_64 (Intel)
+- Creates the GitHub Release with the bottle assets
+- Updates `Formula/paramo.rb` with the new tag, revision, and SHA256 hashes
+
+You don't need to touch the formula manually. The only prerequisite is that the repo has **Read and write permissions** enabled under `Settings → Actions → General → Workflow permissions`.
 
 ## Adding a new language
 

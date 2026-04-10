@@ -7,6 +7,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Streak system (`racha`): tracks consecutive clean days without unblocking during schedule
+- Blocked attempt counter (`intentos`): counts how many times the user tried to unblock during active schedule hours
+- Prebuilt Homebrew bottles for arm64 (Apple Silicon) and x86_64 (Intel) — `brew install` no longer requires compiling Rust from source
+- Automated release workflow: pushing a tag builds bottles, creates the GitHub Release, and updates the formula automatically
+
 ### Changed
 - Split `tui.rs` into a proper module structure (`tui/mod.rs`, `state.rs`, `render.rs`, `input.rs`, `animations.rs`, `helpers.rs`)
 - Moved i18n string literals to external TOML files (`locales/es.toml`, `locales/en.toml`) — strings can now be edited without touching Rust code

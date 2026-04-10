@@ -1,0 +1,117 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-bottle:
+    name: Build bottle (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - macos-latest  # arm64 · Apple Silicon (Sequoia)
+          - macos-13      # x86_64 · Intel (Ventura)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install formula (bottle mode)
+        run: brew install --build-bottle ./Formula/paramo.rb
+
+      - name: Create bottle
+        run: |
+          brew bottle \
+            --json \
+            --root-url "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}" \
+            paramo
+
+      - name: Upload bottle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bottle-${{ matrix.runner }}
+          path: |
+            *.bottle.tar.gz
+            *.bottle.json
+
+  release:
+    needs: build-bottle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download bottle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: bottles
+          merge-multiple: true
+
+      - name: Update formula (tag, revision, bottle block)
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TAG: ${{ github.ref_name }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          python3 << 'PYEOF'
+          import json, re, os, glob
+
+          tag      = os.environ['GH_TAG']   # e.g. v0.1.2
+          sha      = os.environ['GH_SHA']   # commit SHA
+          root_url = f"https://github.com/{os.environ['GH_REPO']}/releases/download/{tag}"
+
+          with open("Formula/paramo.rb") as f:
+              content = f.read()
+
+          # Update tag and revision
+          content = re.sub(r'(tag: ")[^"]*(")',      rf'\g<1>{tag}\g<2>',  content)
+          content = re.sub(r'(revision: ")[^"]*(")', rf'\g<1>{sha}\g<2>', content)
+
+          # Build bottle block from JSON artifacts
+          entries = []
+          for path in sorted(glob.glob("bottles/*.bottle.json")):
+              data = json.load(open(path))
+              formula = next(iter(data.values()))
+              cellar = formula["bottle"]["cellar"]
+              cellar_rb = cellar if cellar.startswith(":") else f'"{cellar}"'
+              for bottle_tag, info in formula["bottle"]["tags"].items():
+                  entries.append(f'    sha256 cellar: {cellar_rb}, {bottle_tag}: "{info["sha256"]}"')
+
+          block = (
+              f'  bottle do\n'
+              f'    root_url "{root_url}"\n'
+              + "\n".join(entries) + "\n"
+              + "  end"
+          )
+
+          # Remove previous bottle block if present
+          content = re.sub(r"\n\n  bottle do.*?  end", "", content, flags=re.DOTALL)
+          # Insert after license line
+          content = re.sub(r'(  license "[^"]*")', r"\1\n\n" + block, content)
+
+          with open("Formula/paramo.rb", "w") as f:
+              f.write(content)
+
+          print(open("Formula/paramo.rb").read())
+          PYEOF
+
+      - name: Create GitHub Release and upload bottles
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bottles/*.bottle.tar.gz
+          generate_release_notes: true
+
+      - name: Commit formula with bottle hashes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/paramo.rb
+          git diff --staged --quiet || git commit -m "chore: add bottles for ${{ github.ref_name }}"
+          git push origin HEAD:master
