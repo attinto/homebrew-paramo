@@ -2,8 +2,8 @@ class Paramo < Formula
   desc "Distraction blocker for macOS with CLI and TUI"
   homepage "https://github.com/attinto/homebrew-paramo"
   url "https://github.com/attinto/homebrew-paramo.git",
-      tag: "v0.1.1",
-      revision: "a0a2e0b8a11fb3e8796ddef5ebec218e63229cbc"
+      tag: "v0.1.3",
+      revision: "cb297dbb31fc56efed50009077abd722ced69609"
   license "MIT"
   head "https://github.com/attinto/homebrew-paramo.git", branch: "master"
 
