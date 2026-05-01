@@ -1,5 +1,5 @@
 use super::helpers::wrap_hour;
-use super::state::{Dashboard, PromptState, TabId, UnblockFlow};
+use super::state::{Dashboard, FrictionAction, FrictionFlow, PromptState, TabId};
 use crate::attempts;
 use crate::config::SiteMutation;
 use crate::i18n::Language;
@@ -12,8 +12,8 @@ use std::time::Instant;
 
 impl Dashboard {
     pub(crate) fn handle_key(&mut self, key: KeyEvent) -> Result<bool> {
-        if self.unblock_flow.is_some() {
-            return self.handle_unblock_flow_key(key);
+        if self.friction_flow.is_some() {
+            return self.handle_friction_flow_key(key);
         }
 
         if self.prompt.is_some() {
@@ -34,18 +34,60 @@ impl Dashboard {
     }
 
     pub(crate) fn perform_pending_actions(&mut self) -> Result<()> {
-        if let Some(reason) = self.pending_unblock.take() {
-            if journal::append(&reason).is_ok() {
-                let _ = attempts::record_completed();
+        let Some(pending) = self.pending_action.take() else {
+            return Ok(());
+        };
+
+        match pending.action {
+            FrictionAction::Unblock => self.apply_pending_unblock(&pending.reason)?,
+            FrictionAction::RemoveSite(site) => self.apply_pending_site_removal(&site, &pending.reason)?,
+        }
+
+        Ok(())
+    }
+
+    fn apply_pending_unblock(&mut self, reason: &str) -> Result<()> {
+        if journal::append(reason).is_ok() {
+            let _ = attempts::record_completed();
+        }
+        self.streak = streak::load().unwrap_or_default();
+        self.wall_entries = journal::load().unwrap_or_default();
+        self.refresh_attempts();
+        match ipc::send_command("unblock") {
+            Ok(()) => self.set_flash(self.i18n.unblocked_now()),
+            Err(error) => self.set_flash(error),
+        }
+        self.refresh_status()?;
+        Ok(())
+    }
+
+    fn apply_pending_site_removal(&mut self, site: &str, reason: &str) -> Result<()> {
+        match self.config.remove_site(site) {
+            Ok(SiteMutation::Removed(removed)) => {
+                if let Err(error) = self.config.save_active() {
+                    self.set_flash(error.to_string());
+                    return Ok(());
+                }
+                let _ = journal::append_site_removal(&removed, reason);
+                self.wall_entries = journal::load().unwrap_or_default();
+                match ipc::send_command("sync") {
+                    Ok(()) => self.set_flash(self.i18n.site_removed(&removed)),
+                    Err(error) => self.set_flash(error),
+                }
+                self.refresh_status()?;
+                self.refresh_diagnostics()?;
+                if self.config.sites.list.is_empty() {
+                    self.sites_state.select(None);
+                } else if let Some(index) = self.sites_state.selected() {
+                    let next = index.min(self.config.sites.list.len() - 1);
+                    self.sites_state.select(Some(next));
+                }
             }
-            self.streak = streak::load().unwrap_or_default();
-            self.wall_entries = journal::load().unwrap_or_default();
-            self.refresh_attempts();
-            match ipc::send_command("unblock") {
-                Ok(()) => self.set_flash(self.i18n.unblocked_now()),
-                Err(error) => self.set_flash(error),
+            Ok(SiteMutation::NotFound(removed)) => {
+                self.set_flash(self.i18n.site_not_found(&removed))
             }
-            self.refresh_status()?;
+            Ok(_) => {}
+            Err(error) => self.set_flash(error),
         }
         Ok(())
     }
@@ -166,38 +208,56 @@ impl Dashboard {
         Ok(false)
     }
 
-    fn handle_unblock_flow_key(&mut self, key: KeyEvent) -> Result<bool> {
+    fn handle_friction_flow_key(&mut self, key: KeyEvent) -> Result<bool> {
         if matches!(key.code, KeyCode::Esc) {
-            self.unblock_flow = None;
-            self.set_flash(self.i18n.unblock_cancelled());
+            let cancelled_flash = match self.friction_flow.as_ref().map(|f| f.action()) {
+                Some(FrictionAction::RemoveSite(_)) => self.i18n.t("site_remove_cancelled"),
+                _ => self.i18n.unblock_cancelled(),
+            };
+            self.friction_flow = None;
+            self.set_flash(cancelled_flash);
             return Ok(false);
         }
 
-        let is_reason_prompt = matches!(self.unblock_flow, Some(UnblockFlow::ReasonPrompt { .. }));
+        let is_reason_prompt =
+            matches!(self.friction_flow, Some(FrictionFlow::ReasonPrompt { .. }));
 
         if is_reason_prompt {
             match key.code {
                 KeyCode::Enter => {
-                    let reason = match &self.unblock_flow {
-                        Some(UnblockFlow::ReasonPrompt { value }) => value.trim().to_string(),
-                        _ => String::new(),
+                    let (action, reason) = match self.friction_flow.take() {
+                        Some(FrictionFlow::ReasonPrompt { action, value }) => {
+                            (action, value.trim().to_string())
+                        }
+                        other => {
+                            self.friction_flow = other;
+                            return Ok(false);
+                        }
                     };
                     if reason.is_empty() {
                         self.set_flash(self.i18n.reason_required());
+                        // Restauramos el prompt para que el usuario reintente.
+                        self.friction_flow = Some(FrictionFlow::ReasonPrompt {
+                            action,
+                            value: String::new(),
+                        });
                     } else {
-                        self.unblock_flow = Some(UnblockFlow::FinalCountdown {
+                        self.friction_flow = Some(FrictionFlow::FinalCountdown {
+                            action,
                             started: Instant::now(),
                             reason,
                         });
                     }
                 }
                 KeyCode::Backspace => {
-                    if let Some(UnblockFlow::ReasonPrompt { value }) = &mut self.unblock_flow {
+                    if let Some(FrictionFlow::ReasonPrompt { value, .. }) = &mut self.friction_flow
+                    {
                         value.pop();
                     }
                 }
                 KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    if let Some(UnblockFlow::ReasonPrompt { value }) = &mut self.unblock_flow {
+                    if let Some(FrictionFlow::ReasonPrompt { value, .. }) = &mut self.friction_flow
+                    {
                         value.push(ch);
                     }
                 }
@@ -220,7 +280,8 @@ impl Dashboard {
     fn try_unblock(&mut self) -> Result<()> {
         if self.status.schedule_active {
             let _ = attempts::record_initiated();
-            self.unblock_flow = Some(UnblockFlow::Countdown {
+            self.friction_flow = Some(FrictionFlow::Countdown {
+                action: FrictionAction::Unblock,
                 started: Instant::now(),
             });
             self.refresh_attempts();
@@ -262,6 +323,9 @@ impl Dashboard {
         Ok(())
     }
 
+    // Quitar un sitio nunca es inmediato: pasa por el mismo proceso de fricción
+    // que el desbloqueo (30 s + motivo + 60 s) para evitar que el usuario
+    // sabotee su propia configuración en un momento de debilidad.
     fn remove_selected_site(&mut self) -> Result<()> {
         let selected = self
             .sites_state
@@ -274,27 +338,10 @@ impl Dashboard {
             return Ok(());
         };
 
-        match self.config.remove_site(&site) {
-            Ok(SiteMutation::Removed(site)) => {
-                self.config.save_active()?;
-                match ipc::send_command("sync") {
-                    Ok(()) => self.set_flash(self.i18n.site_removed(&site)),
-                    Err(error) => self.set_flash(error),
-                }
-                self.refresh_status()?;
-                self.refresh_diagnostics()?;
-                if self.config.sites.list.is_empty() {
-                    self.sites_state.select(None);
-                } else if let Some(index) = self.sites_state.selected() {
-                    let next = index.min(self.config.sites.list.len() - 1);
-                    self.sites_state.select(Some(next));
-                }
-            }
-            Ok(SiteMutation::NotFound(site)) => self.set_flash(self.i18n.site_not_found(&site)),
-            Ok(_) => {}
-            Err(error) => self.set_flash(error),
-        }
-
+        self.friction_flow = Some(FrictionFlow::Countdown {
+            action: FrictionAction::RemoveSite(site),
+            started: Instant::now(),
+        });
         Ok(())
     }
 

@@ -10,27 +10,45 @@ pub struct JournalEntry {
 }
 
 pub fn append(reason: &str) -> std::io::Result<()> {
+    let resolved = if reason.is_empty() {
+        "(sin motivo)"
+    } else {
+        reason
+    };
+    write_entry(resolved)?;
+    if let Err(error) = streak::record_break(resolved) {
+        eprintln!("Failed to record streak break: {error}");
+    }
+    Ok(())
+}
+
+// Eliminar un sitio también pasa por el muro, para que quede traza visible
+// del motivo, pero NO rompe la racha: la racha sólo penaliza desbloquear
+// dentro del horario.
+pub fn append_site_removal(site: &str, reason: &str) -> std::io::Result<()> {
+    let reason = if reason.is_empty() {
+        "(sin motivo)"
+    } else {
+        reason
+    };
+    let line = format!("[Eliminado sitio {site}] {reason}");
+    write_entry(&line)
+}
+
+fn write_entry(line: &str) -> std::io::Result<()> {
     let path = paths::user_journal_file();
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
 
     let timestamp = Local::now().to_rfc3339();
-    let reason = if reason.is_empty() {
-        "(sin motivo)"
-    } else {
-        reason
-    };
 
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&path)?;
 
-    writeln!(file, "{}|{}", timestamp, reason)?;
-    if let Err(error) = streak::record_break(reason) {
-        eprintln!("Failed to record streak break: {error}");
-    }
+    writeln!(file, "{}|{}", timestamp, line)?;
     Ok(())
 }
 

@@ -1,6 +1,6 @@
 use crate::config::{ConfigSource, SystemConfig};
 use crate::hosts;
-use crate::i18n::{I18n, Language};
+use crate::i18n::I18n;
 use crate::launchd;
 use crate::paths;
 use anyhow::Result;
@@ -63,52 +63,21 @@ fn config_source_diagnostic(i18n: I18n) -> Diagnostic {
     match SystemConfig::config_source() {
         ConfigSource::Active => diagnostic(
             DiagnosticLevel::Ok,
-            i18n,
-            text(
-                i18n,
-                "Configuración activa encontrada",
-                "Active configuration found",
-            ),
+            i18n.t("doctor_config_active_title"),
             paths::SYSTEM_CONFIG_FILE,
             None,
         ),
         ConfigSource::Legacy => diagnostic(
             DiagnosticLevel::Warn,
-            i18n,
-            text(
-                i18n,
-                "PARAMO está usando la configuración legacy",
-                "PARAMO is using the legacy configuration",
-            ),
-            text(
-                i18n,
-                "No existe /etc/paramo/config.toml; la app está leyendo /etc/undistracted/config.toml.",
-                "No /etc/paramo/config.toml exists; the app is reading /etc/undistracted/config.toml.",
-            ),
-            Some(text(
-                i18n,
-                "Ejecuta `sudo paramo install` para migrarla.",
-                "Run `sudo paramo install` to migrate it.",
-            )),
+            i18n.t("doctor_config_legacy_title"),
+            i18n.t("doctor_config_legacy_detail"),
+            Some(i18n.t("doctor_config_legacy_hint")),
         ),
         ConfigSource::EmbeddedDefault => diagnostic(
             DiagnosticLevel::Warn,
-            i18n,
-            text(
-                i18n,
-                "No existe configuración instalada",
-                "No installed configuration was found",
-            ),
-            text(
-                i18n,
-                "PARAMO está usando la plantilla embebida del repositorio; todavía no hay /etc/paramo/config.toml.",
-                "PARAMO is using the embedded template from the repo; /etc/paramo/config.toml does not exist yet.",
-            ),
-            Some(text(
-                i18n,
-                "Ejecuta `sudo paramo install` para crear la configuración activa.",
-                "Run `sudo paramo install` to create the active configuration.",
-            )),
+            i18n.t("doctor_config_embedded_title"),
+            i18n.t("doctor_config_embedded_detail"),
+            Some(i18n.t("doctor_config_embedded_hint")),
         ),
     }
 }
@@ -138,18 +107,9 @@ fn legacy_installation_diagnostic(i18n: I18n) -> Result<Option<Diagnostic>> {
 
     Ok(Some(diagnostic(
         DiagnosticLevel::Warn,
-        i18n,
-        text(
-            i18n,
-            "Se han detectado restos de Undistracted",
-            "Legacy Undistracted artifacts were detected",
-        ),
+        i18n.t("doctor_legacy_artifacts_title"),
         artifacts.join(", "),
-        Some(text(
-            i18n,
-            "PARAMO puede funcionar así, pero conviene limpiar esos restos para evitar confusión.",
-            "PARAMO can work like this, but removing those leftovers is recommended to avoid confusion.",
-        )),
+        Some(i18n.t("doctor_legacy_artifacts_hint")),
     )))
 }
 
@@ -158,18 +118,9 @@ fn plist_diagnostic(_config: &SystemConfig, i18n: I18n) -> Diagnostic {
     if !plist_path.exists() {
         return diagnostic(
             DiagnosticLevel::Warn,
-            i18n,
-            text(
-                i18n,
-                "LaunchDaemon no instalado",
-                "LaunchDaemon not installed",
-            ),
+            i18n.t("doctor_plist_missing_title"),
             paths::PLIST_DEST,
-            Some(text(
-                i18n,
-                "Sin daemon, PARAMO solo actuará cuando lo ejecutes manualmente.",
-                "Without the daemon, PARAMO only runs when launched manually.",
-            )),
+            Some(i18n.t("doctor_plist_missing_hint")),
         );
     }
 
@@ -178,8 +129,7 @@ fn plist_diagnostic(_config: &SystemConfig, i18n: I18n) -> Diagnostic {
         Err(error) => {
             return diagnostic(
                 DiagnosticLevel::Error,
-                i18n,
-                text(i18n, "No se pudo leer el plist", "Could not read the plist"),
+                i18n.t("doctor_plist_unreadable_title"),
                 error.to_string(),
                 None,
             );
@@ -194,18 +144,9 @@ fn plist_diagnostic(_config: &SystemConfig, i18n: I18n) -> Diagnostic {
     if label.as_deref() != Some(paths::LAUNCHD_LABEL) || !run_argument_ok {
         return diagnostic(
             DiagnosticLevel::Warn,
-            i18n,
-            text(
-                i18n,
-                "El plist de launchd no coincide con la configuración actual",
-                "The launchd plist does not match the current configuration",
-            ),
+            i18n.t("doctor_plist_mismatch_title"),
             format!("Label={:?}, ProgramArguments={:?}", label, args),
-            Some(text(
-                i18n,
-                "Ejecuta `sudo paramo install` para regenerarlo.",
-                "Run `sudo paramo install` to regenerate it.",
-            )),
+            Some(i18n.t("doctor_plist_mismatch_hint")),
         );
     }
 
@@ -213,26 +154,16 @@ fn plist_diagnostic(_config: &SystemConfig, i18n: I18n) -> Diagnostic {
         if !Path::new(&binary).exists() {
             return diagnostic(
                 DiagnosticLevel::Error,
-                i18n,
-                text(
-                    i18n,
-                    "El plist apunta a un binario inexistente",
-                    "The plist points to a missing binary",
-                ),
+                i18n.t("doctor_plist_binary_missing_title"),
                 binary,
-                Some(text(
-                    i18n,
-                    "Ejecuta `sudo paramo install` para reparar la instalación.",
-                    "Run `sudo paramo install` to repair the installation.",
-                )),
+                Some(i18n.t("doctor_plist_binary_missing_hint")),
             );
         }
     }
 
     diagnostic(
         DiagnosticLevel::Ok,
-        i18n,
-        text(i18n, "LaunchDaemon válido", "LaunchDaemon looks valid"),
+        i18n.t("doctor_plist_valid_title"),
         format!("{} -> {:?}", paths::PLIST_DEST, args),
         None,
     )
@@ -255,12 +186,7 @@ fn launchd_runtime_diagnostic(i18n: I18n) -> Result<Diagnostic> {
 
         return Ok(diagnostic(
             DiagnosticLevel::Ok,
-            i18n,
-            text(
-                i18n,
-                "Servicio cargado en launchd",
-                "Service loaded in launchd",
-            ),
+            i18n.t("doctor_launchd_loaded_title"),
             detail,
             None,
         ));
@@ -268,39 +194,18 @@ fn launchd_runtime_diagnostic(i18n: I18n) -> Result<Diagnostic> {
 
     let (detail, hint) = match service.disabled {
         Some(true) => (
-            text(
-                i18n,
-                "El servicio existe pero está marcado como disabled en launchd.",
-                "The service exists but it is marked as disabled in launchd.",
-            ),
-            text(
-                i18n,
-                "Ejecuta `sudo paramo install` para volver a registrarlo.",
-                "Run `sudo paramo install` to register it again.",
-            ),
+            i18n.t("doctor_launchd_disabled_detail"),
+            i18n.t("doctor_launchd_disabled_hint"),
         ),
         _ => (
-            text(
-                i18n,
-                "Launchd no tiene cargado el servicio de PARAMO.",
-                "launchd does not have the PARAMO service loaded.",
-            ),
-            text(
-                i18n,
-                "Ejecuta `sudo paramo install` y vuelve a comprobarlo con `paramo doctor`.",
-                "Run `sudo paramo install` and check again with `paramo doctor`.",
-            ),
+            i18n.t("doctor_launchd_not_loaded_detail"),
+            i18n.t("doctor_launchd_not_loaded_hint"),
         ),
     };
 
     Ok(diagnostic(
         DiagnosticLevel::Warn,
-        i18n,
-        text(
-            i18n,
-            "Servicio no cargado en launchd",
-            "Service is not loaded in launchd",
-        ),
+        i18n.t("doctor_launchd_not_loaded_title"),
         detail,
         Some(hint),
     ))
@@ -310,24 +215,14 @@ fn site_list_diagnostic(config: &SystemConfig, i18n: I18n) -> Diagnostic {
     if config.sites.list.is_empty() {
         diagnostic(
             DiagnosticLevel::Warn,
-            i18n,
-            text(i18n, "No hay sitios configurados", "No sites configured"),
-            text(
-                i18n,
-                "La lista de sitios está vacía.",
-                "The site list is empty.",
-            ),
-            Some(text(
-                i18n,
-                "Añade sitios con `paramo site add dominio.com`.",
-                "Add sites with `paramo site add domain.com`.",
-            )),
+            i18n.t("doctor_sites_empty_title"),
+            i18n.t("doctor_sites_empty_detail"),
+            Some(i18n.t("doctor_sites_empty_hint")),
         )
     } else {
         diagnostic(
             DiagnosticLevel::Ok,
-            i18n,
-            text(i18n, "Lista de sitios cargada", "Site list loaded"),
+            i18n.t("doctor_sites_loaded_title"),
             format!(
                 "{}: {}",
                 i18n.configured_sites_label(),
@@ -345,18 +240,9 @@ fn hosts_diagnostics(config: &SystemConfig, i18n: I18n) -> Result<Vec<Diagnostic
         Err(error) => {
             diagnostics.push(diagnostic(
                 DiagnosticLevel::Error,
-                i18n,
-                text(
-                    i18n,
-                    "No se pudo leer el archivo hosts",
-                    "Could not read the hosts file",
-                ),
+                i18n.t("doctor_hosts_unreadable_title"),
                 error.to_string(),
-                Some(text(
-                    i18n,
-                    "Comprueba que el archivo exista y que PARAMO tenga permisos para leerlo.",
-                    "Check that the file exists and PARAMO can read it.",
-                )),
+                Some(i18n.t("doctor_hosts_unreadable_hint")),
             ));
             return Ok(diagnostics);
         }
@@ -366,28 +252,14 @@ fn hosts_diagnostics(config: &SystemConfig, i18n: I18n) -> Result<Vec<Diagnostic
     diagnostics.push(if marker_count > 2 {
         diagnostic(
             DiagnosticLevel::Warn,
-            i18n,
-            text(
-                i18n,
-                "Secciones duplicadas en hosts",
-                "Duplicate hosts sections detected",
-            ),
+            i18n.t("doctor_hosts_duplicate_title"),
             format!("{} markers", marker_count),
-            Some(text(
-                i18n,
-                "Ejecuta `paramo block` o `paramo unblock` para normalizar el bloque.",
-                "Run `paramo block` or `paramo unblock` to normalize the block.",
-            )),
+            Some(i18n.t("doctor_hosts_duplicate_hint")),
         )
     } else {
         diagnostic(
             DiagnosticLevel::Ok,
-            i18n,
-            text(
-                i18n,
-                "Archivo hosts consistente",
-                "Hosts file looks consistent",
-            ),
+            i18n.t("doctor_hosts_consistent_title"),
             config.hosts.file.display().to_string(),
             None,
         )
@@ -404,37 +276,15 @@ fn hosts_diagnostics(config: &SystemConfig, i18n: I18n) -> Result<Vec<Diagnostic
         {
             diagnostic(
                 DiagnosticLevel::Warn,
-                i18n,
-                text(
-                    i18n,
-                    "El bloque activo no coincide con la configuración",
-                    "Active hosts block does not match the configuration",
-                ),
-                text(
-                    i18n,
-                    "Hay una discrepancia entre `/etc/hosts` y la lista de sitios configurados.",
-                    "There is a mismatch between `/etc/hosts` and the configured site list.",
-                ),
-                Some(text(
-                    i18n,
-                    "Ejecuta `paramo block`, `paramo unblock` o cambia la configuración para resincronizar el bloqueo.",
-                    "Run `paramo block`, `paramo unblock`, or change the configuration to resync blocking.",
-                )),
+                i18n.t("doctor_hosts_mismatch_title"),
+                i18n.t("doctor_hosts_mismatch_detail"),
+                Some(i18n.t("doctor_hosts_mismatch_hint")),
             )
         } else {
             diagnostic(
                 DiagnosticLevel::Ok,
-                i18n,
-                text(
-                    i18n,
-                    "Bloque hosts sincronizado",
-                    "Hosts block is synchronized",
-                ),
-                text(
-                    i18n,
-                    "La sección gestionada por PARAMO coincide con la configuración.",
-                    "The PARAMO-managed section matches the configuration.",
-                ),
+                i18n.t("doctor_hosts_synced_title"),
+                i18n.t("doctor_hosts_synced_detail"),
                 None,
             )
         },
@@ -446,35 +296,14 @@ fn hosts_diagnostics(config: &SystemConfig, i18n: I18n) -> Result<Vec<Diagnostic
 fn doh_diagnostic(i18n: I18n) -> Diagnostic {
     diagnostic(
         DiagnosticLevel::Warn,
-        i18n,
-        text(
-            i18n,
-            "Recuerda revisar DNS over HTTPS en navegadores",
-            "Remember to review DNS over HTTPS in browsers",
-        ),
-        text(
-            i18n,
-            "Firefox y otros navegadores pueden ignorar `/etc/hosts` si DoH está activo.",
-            "Firefox and other browsers can ignore `/etc/hosts` when DoH is enabled.",
-        ),
-        Some(text(
-            i18n,
-            "Si una web sigue entrando, desactiva DoH en el navegador.",
-            "If a site still opens, disable DoH in the browser.",
-        )),
+        i18n.t("doctor_doh_title"),
+        i18n.t("doctor_doh_detail"),
+        Some(i18n.t("doctor_doh_hint")),
     )
-}
-
-fn text<'a>(i18n: I18n, spanish: &'a str, english: &'a str) -> &'a str {
-    match i18n.language() {
-        Language::Es => spanish,
-        Language::En => english,
-    }
 }
 
 fn diagnostic(
     level: DiagnosticLevel,
-    _i18n: I18n,
     title: impl Into<String>,
     detail: impl Into<String>,
     hint: Option<&str>,
@@ -490,12 +319,12 @@ fn diagnostic(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::i18n::Language;
 
     #[test]
     fn test_render_cli_contains_levels() {
         let diagnostics = vec![diagnostic(
             DiagnosticLevel::Warn,
-            I18n::new(Language::En),
             "Title",
             "Detail",
             Some("Hint"),

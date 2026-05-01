@@ -88,6 +88,11 @@ paramo site add youtube.com
 paramo site remove youtube.com
 ```
 
+`paramo site remove` exige el mismo proceso de fricción que el desbloqueo:
+30 segundos de espera, un motivo escrito a mano y otros 60 segundos de
+espera antes de aplicar la eliminación. El comando requiere una terminal
+interactiva. Igual desde la pestaña *Sitios* de la TUI.
+
 ### Ver y cambiar el horario
 
 ```bash
