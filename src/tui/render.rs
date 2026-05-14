@@ -1,8 +1,10 @@
 use super::animations::{ASCII_ART, DISTRACTION_PHRASES, WAVE_FRAMES};
 use super::helpers::centered_rect;
-use super::state::{Dashboard, FrictionAction, FrictionFlow, TabId};
+use super::state::{Dashboard, FrictionAction, FrictionFlow, HabitsInput, TabId};
 use crate::attempts::DayAttempts;
 use crate::doctor::DiagnosticLevel;
+use crate::habits::{self, HabitFrequency, Habit};
+use crate::i18n::I18n;
 use crate::paths;
 use chrono::Datelike;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
@@ -32,6 +34,20 @@ impl Dashboard {
 
         if let Some(prompt) = &self.prompt.clone() {
             self.render_prompt(frame, &prompt.title.clone(), &prompt.value.clone());
+        }
+
+        // Habits modals (drawn after body so they float on top)
+        match self.habits_input.clone() {
+            Some(HabitsInput::EnteringName { value }) => {
+                self.render_prompt(frame, self.i18n.habits_add_name_prompt(), &value);
+            }
+            Some(HabitsInput::SelectingFrequency { selected, .. }) => {
+                self.render_habits_freq_modal(frame, selected);
+            }
+            Some(HabitsInput::ConfirmDelete { .. }) => {
+                self.render_prompt(frame, self.i18n.habits_delete_confirm(), "");
+            }
+            None => {}
         }
 
         self.render_friction_flow(frame);
@@ -126,6 +142,7 @@ impl Dashboard {
             self.i18n.diagnostics_tab(),
             self.i18n.attempts_tab(),
             self.i18n.streak_tab(),
+            self.i18n.habits_tab(),
             self.i18n.wall_tab(),
             self.i18n.exit_tab(),
         ]
@@ -156,6 +173,7 @@ impl Dashboard {
             TabId::Diagnostics => self.render_diagnostics(frame, area),
             TabId::Attempts => self.render_attempts(frame, area),
             TabId::Streak => self.render_streak(frame, area),
+            TabId::Habits => self.render_habits(frame, area),
             TabId::Wall => self.render_wall(frame, area),
             TabId::Exit => self.render_exit(frame, area),
         }
@@ -599,6 +617,7 @@ impl Dashboard {
         let fallback = match self.active_tab {
             TabId::Diagnostics => self.i18n.diagnostics_refresh().to_string(),
             TabId::Exit => self.i18n.exit_screen_body().to_string(),
+            TabId::Habits => "[Enter] marcar/desmarcar  [a] añadir  [d] eliminar  ↑↓ navegar".to_string(),
             _ => self.i18n.tui_hint().to_string(),
         };
         let message = self.flash_message.clone().unwrap_or(fallback);
@@ -847,6 +866,280 @@ impl Dashboard {
         }
     }
 
+    fn render_habits(&mut self, frame: &mut Frame, area: Rect) {
+        let rows = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(3)])
+            .split(area);
+
+        let columns = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
+            .split(rows[0]);
+
+        self.render_habits_list(frame, columns[0]);
+        self.render_habits_detail(frame, columns[1]);
+        self.render_habits_progress_strip(frame, rows[1]);
+    }
+
+    fn render_habits_list(&mut self, frame: &mut Frame, area: Rect) {
+        let i18n = self.i18n;
+        let items: Vec<ListItem> = if self.habits.habits.is_empty() {
+            vec![ListItem::new(Line::from(Span::styled(
+                i18n.habits_empty(),
+                Style::default().fg(Color::Rgb(190, 197, 208)),
+            )))]
+        } else {
+            self.habits
+                .habits
+                .iter()
+                .map(|h| {
+                    let (icon, icon_color) = habit_status_icon(h);
+                    let freq = habit_freq_label(h, i18n);
+                    let name = truncate_habit_name(&h.name, 22);
+                    let line = Line::from(vec![
+                        Span::styled(
+                            format!("{} ", icon),
+                            Style::default().fg(icon_color),
+                        ),
+                        Span::raw(format!("{:<22} ", name)),
+                        Span::styled(
+                            freq.to_string(),
+                            Style::default().fg(Color::Rgb(190, 197, 208)),
+                        ),
+                    ]);
+                    ListItem::new(line)
+                })
+                .collect()
+        };
+
+        let list = List::new(items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(self.i18n.habits_title()),
+            )
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Rgb(241, 203, 126))
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol("› ");
+
+        frame.render_stateful_widget(list, area, &mut self.habits_state);
+    }
+
+    fn render_habits_detail(&self, frame: &mut Frame, area: Rect) {
+        let selected = self
+            .habits_state
+            .selected()
+            .and_then(|i| self.habits.habits.get(i));
+
+        let lines: Vec<Line> = match selected {
+            None => vec![Line::from(Span::styled(
+                self.i18n.habits_none_selected(),
+                Style::default().fg(Color::Rgb(190, 197, 208)),
+            ))],
+            Some(h) => {
+                let today = chrono::Local::now().date_naive();
+                let streak = habits::current_streak(h);
+                let best = habits::best_streak(h);
+                let rate = habits::completion_rate_last_n(h, 14);
+                let done_today = habits::is_completed_in_period(h, today);
+
+                let bar: String = (0u32..14)
+                    .rev()
+                    .map(|offset| {
+                        let date = today - chrono::Duration::days(offset as i64);
+                        if matches!(h.frequency, HabitFrequency::Weekdays)
+                            && matches!(
+                                date.weekday(),
+                                chrono::Weekday::Sat | chrono::Weekday::Sun
+                            )
+                        {
+                            '·'
+                        } else if habits::is_completed_in_period(h, date) {
+                            '█'
+                        } else {
+                            '░'
+                        }
+                    })
+                    .collect();
+
+                let freq_label = habit_freq_label(h, self.i18n);
+
+                vec![
+                    Line::from(Span::styled(
+                        h.name.clone(),
+                        Style::default()
+                            .fg(Color::Rgb(241, 203, 126))
+                            .add_modifier(Modifier::BOLD),
+                    )),
+                    Line::from(""),
+                    Line::from(format!(
+                        "{}: {}",
+                        self.i18n.habits_frequency(),
+                        freq_label
+                    )),
+                    Line::from(format!(
+                        "{}: {}",
+                        self.i18n.habits_streak_current(),
+                        streak
+                    )),
+                    Line::from(format!(
+                        "{}: {}",
+                        self.i18n.habits_streak_best(),
+                        best
+                    )),
+                    Line::from(format!(
+                        "{}: {}",
+                        self.i18n.habits_done_today(),
+                        if done_today {
+                            self.i18n.habits_si()
+                        } else {
+                            self.i18n.habits_no()
+                        }
+                    )),
+                    Line::from(format!(
+                        "{}: {}",
+                        self.i18n.habits_created(),
+                        h.created_at
+                    )),
+                    Line::from(""),
+                    Line::from(Span::styled(
+                        self.i18n.habits_last_14(),
+                        Style::default().fg(Color::Rgb(190, 197, 208)),
+                    )),
+                    Line::from(Span::styled(
+                        bar,
+                        Style::default().fg(Color::Rgb(123, 201, 111)),
+                    )),
+                    Line::from(Span::styled(
+                        format!("{}%", rate),
+                        Style::default().fg(Color::Rgb(177, 214, 166)),
+                    )),
+                ]
+            }
+        };
+
+        frame.render_widget(
+            Paragraph::new(lines)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(self.i18n.habits_detail_title()),
+                )
+                .wrap(Wrap { trim: true }),
+            area,
+        );
+    }
+
+    fn render_habits_progress_strip(&self, frame: &mut Frame, area: Rect) {
+        let today = chrono::Local::now().date_naive();
+        let due_count = self
+            .habits
+            .habits
+            .iter()
+            .filter(|h| habits::is_due_today(h))
+            .count();
+        let done_count = self
+            .habits
+            .habits
+            .iter()
+            .filter(|h| habits::is_due_today(h) && habits::is_completed_in_period(h, today))
+            .count();
+
+        let bar_width: usize = 20;
+        let filled = if due_count > 0 {
+            (done_count * bar_width) / due_count
+        } else {
+            0
+        };
+        let empty = bar_width - filled;
+        let bar = format!("{}{}", "█".repeat(filled), "░".repeat(empty));
+
+        let color = if due_count == 0 {
+            Color::Rgb(190, 197, 208)
+        } else if done_count == due_count {
+            Color::Rgb(123, 201, 111)
+        } else {
+            Color::Rgb(241, 203, 126)
+        };
+
+        let line = Line::from(vec![
+            Span::styled(
+                format!(
+                    "{}: {}/{} ",
+                    self.i18n.habits_today_progress(),
+                    done_count,
+                    due_count
+                ),
+                Style::default().fg(Color::Rgb(231, 223, 201)),
+            ),
+            Span::styled(bar, Style::default().fg(color)),
+        ]);
+
+        frame.render_widget(
+            Paragraph::new(line)
+                .block(Block::default().borders(Borders::ALL))
+                .wrap(Wrap { trim: false }),
+            area,
+        );
+    }
+
+    fn render_habits_freq_modal(&self, frame: &mut Frame, selected: usize) {
+        let area = centered_rect(50, 45, frame.area());
+        frame.render_widget(Clear, area);
+
+        let options = [
+            self.i18n.habits_freq_option_daily(),
+            self.i18n.habits_freq_option_weekly(),
+            self.i18n.habits_freq_option_monthly(),
+            self.i18n.habits_freq_option_weekdays(),
+        ];
+
+        let mut lines = vec![
+            Line::from(Span::styled(
+                self.i18n.habits_add_freq_prompt(),
+                Style::default().fg(Color::Rgb(231, 223, 201)),
+            )),
+            Line::from(""),
+        ];
+
+        for (i, opt) in options.iter().enumerate() {
+            if i == selected {
+                lines.push(Line::from(Span::styled(
+                    format!("› {}", opt),
+                    Style::default()
+                        .fg(Color::Rgb(241, 203, 126))
+                        .add_modifier(Modifier::BOLD),
+                )));
+            } else {
+                lines.push(Line::from(Span::styled(
+                    format!("  {}", opt),
+                    Style::default().fg(Color::Rgb(190, 197, 208)),
+                )));
+            }
+        }
+
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "Enter confirmar  ·  Esc cancelar",
+            Style::default().fg(Color::Rgb(190, 197, 208)),
+        )));
+
+        frame.render_widget(
+            Paragraph::new(lines)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(self.i18n.habits_add_freq_prompt()),
+                )
+                .alignment(Alignment::Left),
+            area,
+        );
+    }
+
     fn attempts_summary_line(&self, label: &str, day: &DayAttempts) -> Line<'static> {
         Line::from(format!(
             "{label:<12} {}: {}   {}: {}   {}: {}",
@@ -901,5 +1194,36 @@ impl Dashboard {
 
     fn short_weekday(&self, weekday: chrono::Weekday) -> String {
         self.i18n.weekday(weekday).chars().take(3).collect()
+    }
+}
+
+// Free functions to avoid borrow conflicts: these take plain refs rather than &self,
+// so the list's &mut ListState can be borrowed simultaneously.
+
+fn habit_status_icon(h: &Habit) -> (&'static str, Color) {
+    let today = chrono::Local::now().date_naive();
+    if !habits::is_due_today(h) {
+        ("—", Color::Rgb(190, 197, 208))
+    } else if habits::is_completed_in_period(h, today) {
+        ("✓", Color::Rgb(123, 201, 111))
+    } else {
+        ("○", Color::Rgb(241, 203, 126))
+    }
+}
+
+fn habit_freq_label(h: &Habit, i18n: I18n) -> &'static str {
+    match h.frequency {
+        HabitFrequency::Daily => i18n.habits_freq_daily(),
+        HabitFrequency::Weekly => i18n.habits_freq_weekly(),
+        HabitFrequency::Monthly => i18n.habits_freq_monthly(),
+        HabitFrequency::Weekdays => i18n.habits_freq_weekdays(),
+    }
+}
+
+fn truncate_habit_name(name: &str, max: usize) -> String {
+    if name.chars().count() <= max {
+        name.to_string()
+    } else {
+        format!("{}…", name.chars().take(max - 1).collect::<String>())
     }
 }

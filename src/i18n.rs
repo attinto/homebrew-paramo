@@ -436,4 +436,37 @@ impl I18n {
             ],
         )
     }
+
+    // --- Hábitos ---
+    pub fn habits_tab(self) -> &'static str { self.t("habits_tab") }
+    pub fn habits_title(self) -> &'static str { self.t("habits_title") }
+    pub fn habits_detail_title(self) -> &'static str { self.t("habits_detail_title") }
+    pub fn habits_empty(self) -> &'static str { self.t("habits_empty") }
+    pub fn habits_none_selected(self) -> &'static str { self.t("habits_none_selected") }
+    pub fn habits_freq_daily(self) -> &'static str { self.t("habits_freq_daily") }
+    pub fn habits_freq_weekly(self) -> &'static str { self.t("habits_freq_weekly") }
+    pub fn habits_freq_monthly(self) -> &'static str { self.t("habits_freq_monthly") }
+    pub fn habits_freq_weekdays(self) -> &'static str { self.t("habits_freq_weekdays") }
+    pub fn habits_streak_current(self) -> &'static str { self.t("habits_streak_current") }
+    pub fn habits_streak_best(self) -> &'static str { self.t("habits_streak_best") }
+    pub fn habits_created(self) -> &'static str { self.t("habits_created") }
+    pub fn habits_done_today(self) -> &'static str { self.t("habits_done_today") }
+    pub fn habits_frequency(self) -> &'static str { self.t("habits_frequency") }
+    pub fn habits_last_14(self) -> &'static str { self.t("habits_last_14") }
+    pub fn habits_today_progress(self) -> &'static str { self.t("habits_today_progress") }
+    pub fn habits_add_name_prompt(self) -> &'static str { self.t("habits_add_name_prompt") }
+    pub fn habits_add_freq_prompt(self) -> &'static str { self.t("habits_add_freq_prompt") }
+    pub fn habits_freq_option_daily(self) -> &'static str { self.t("habits_freq_option_daily") }
+    pub fn habits_freq_option_weekly(self) -> &'static str { self.t("habits_freq_option_weekly") }
+    pub fn habits_freq_option_monthly(self) -> &'static str { self.t("habits_freq_option_monthly") }
+    pub fn habits_freq_option_weekdays(self) -> &'static str { self.t("habits_freq_option_weekdays") }
+    pub fn habits_removed(self) -> &'static str { self.t("habits_removed") }
+    pub fn habits_none_to_delete(self) -> &'static str { self.t("habits_none_to_delete") }
+    pub fn habits_delete_confirm(self) -> &'static str { self.t("habits_delete_confirm") }
+    pub fn habits_si(self) -> &'static str { self.t("habits_si") }
+    pub fn habits_no(self) -> &'static str { self.t("habits_no") }
+
+    pub fn habits_added(self, name: &str) -> String {
+        self.format("habits_added", &[name])
+    }
 }

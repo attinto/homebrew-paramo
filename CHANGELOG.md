@@ -8,6 +8,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Habits tab**: new TUI tab (between Streak and Wall) for tracking personal habits. Each habit has a name and frequency (daily, weekly, monthly, or weekdays-only). Users can mark habits as done per period, see per-habit streak and best-streak, a 14-period history bar (█/░), and a daily progress strip showing X/N habits completed today. Data persists locally in `~/.config/paramo/habits.json`.
 - Streak system (`racha`): tracks consecutive clean days without unblocking during schedule
 - Blocked attempt counter (`intentos`): counts how many times the user tried to unblock during active schedule hours
 - Prebuilt Homebrew bottles for arm64 (Apple Silicon) and x86_64 (Intel) — `brew install` no longer requires compiling Rust from source
