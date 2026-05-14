@@ -861,11 +861,9 @@ impl Dashboard {
 
     fn attempts_day_line(&self, day: &DayAttempts) -> Line<'static> {
         let label = self.short_weekday(day.date.weekday());
-        let filled = if day.initiated == 0 {
-            0
-        } else {
-            ((day.resisted * 6) + (day.initiated / 2)) / day.initiated
-        };
+        let filled = ((day.resisted * 6) + (day.initiated / 2))
+            .checked_div(day.initiated)
+            .unwrap_or(0);
         let empty = 6_u32.saturating_sub(filled);
         let bar = format!(
             "{}{}",
