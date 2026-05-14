@@ -1,6 +1,6 @@
 use super::animations::{ASCII_ART, DISTRACTION_PHRASES, WAVE_FRAMES};
 use super::helpers::centered_rect;
-use super::state::{Dashboard, TabId, UnblockFlow};
+use super::state::{Dashboard, FrictionAction, FrictionFlow, TabId};
 use crate::attempts::DayAttempts;
 use crate::doctor::DiagnosticLevel;
 use crate::paths;
@@ -13,7 +13,7 @@ use ratatui::Frame;
 
 impl Dashboard {
     pub(crate) fn render(&mut self, frame: &mut Frame) {
-        self.advance_unblock_flow();
+        self.advance_friction_flow();
 
         let outer = Layout::default()
             .direction(Direction::Vertical)
@@ -34,7 +34,7 @@ impl Dashboard {
             self.render_prompt(frame, &prompt.title.clone(), &prompt.value.clone());
         }
 
-        self.render_unblock_flow(frame);
+        self.render_friction_flow(frame);
     }
 
     fn render_header(&self, frame: &mut Frame, area: Rect) {
@@ -634,14 +634,53 @@ impl Dashboard {
         );
     }
 
-    fn render_unblock_flow(&self, frame: &mut Frame) {
-        match &self.unblock_flow {
+    fn friction_countdown_title(&self, action: &FrictionAction) -> String {
+        match action {
+            FrictionAction::Unblock => self.i18n.countdown_title().to_string(),
+            FrictionAction::RemoveSite(site) => {
+                self.i18n.format("site_remove_countdown_title", &[site])
+            }
+        }
+    }
+
+    fn friction_countdown_subtitle(&self, action: &FrictionAction) -> String {
+        match action {
+            FrictionAction::Unblock => self.i18n.countdown_subtitle().to_string(),
+            FrictionAction::RemoveSite(_) => {
+                self.i18n.t("site_remove_countdown_subtitle").to_string()
+            }
+        }
+    }
+
+    fn friction_reason_title(&self, action: &FrictionAction) -> String {
+        match action {
+            FrictionAction::Unblock => self.i18n.reason_prompt_title().to_string(),
+            FrictionAction::RemoveSite(site) => {
+                self.i18n.format("site_remove_reason_title", &[site])
+            }
+        }
+    }
+
+    fn friction_final_title(&self, action: &FrictionAction) -> String {
+        match action {
+            FrictionAction::Unblock => self.i18n.final_countdown_title().to_string(),
+            FrictionAction::RemoveSite(site) => {
+                self.i18n.format("site_remove_final_title", &[site])
+            }
+        }
+    }
+
+    fn render_friction_flow(&self, frame: &mut Frame) {
+        match &self.friction_flow {
             None => {}
-            Some(UnblockFlow::Countdown { started }) => {
+            Some(FrictionFlow::Countdown { action, started }) => {
                 let elapsed = started.elapsed().as_secs().min(30);
                 let remaining = 30 - elapsed;
                 let phrase_index = (elapsed / 3) as usize % DISTRACTION_PHRASES.len();
                 let phrase = DISTRACTION_PHRASES[phrase_index];
+
+                let title = self.friction_countdown_title(action);
+                let subtitle = self.friction_countdown_subtitle(action);
 
                 let area = centered_rect(62, 55, frame.area());
                 frame.render_widget(Clear, area);
@@ -649,14 +688,14 @@ impl Dashboard {
                     Paragraph::new(vec![
                         Line::from(""),
                         Line::from(Span::styled(
-                            self.i18n.countdown_title(),
+                            title,
                             Style::default()
                                 .fg(Color::Rgb(241, 203, 126))
                                 .add_modifier(Modifier::BOLD),
                         )),
                         Line::from(""),
                         Line::from(Span::styled(
-                            self.i18n.countdown_subtitle(),
+                            subtitle,
                             Style::default().fg(Color::Rgb(231, 223, 201)),
                         )),
                         Line::from(""),
@@ -688,13 +727,14 @@ impl Dashboard {
                     area,
                 );
             }
-            Some(UnblockFlow::ReasonPrompt { value }) => {
+            Some(FrictionFlow::ReasonPrompt { action, value }) => {
+                let title = self.friction_reason_title(action);
                 let area = centered_rect(70, 35, frame.area());
                 frame.render_widget(Clear, area);
                 frame.render_widget(
                     Paragraph::new(vec![
                         Line::from(Span::styled(
-                            self.i18n.reason_prompt_title(),
+                            title,
                             Style::default()
                                 .fg(Color::Rgb(241, 203, 126))
                                 .add_modifier(Modifier::BOLD),
@@ -721,7 +761,11 @@ impl Dashboard {
                     area,
                 );
             }
-            Some(UnblockFlow::FinalCountdown { started, reason }) => {
+            Some(FrictionFlow::FinalCountdown {
+                action,
+                started,
+                reason,
+            }) => {
                 let elapsed = started.elapsed().as_secs().min(60);
                 let remaining = 60 - elapsed;
 
@@ -750,7 +794,7 @@ impl Dashboard {
                     Paragraph::new(vec![
                         Line::from(""),
                         Line::from(Span::styled(
-                            self.i18n.final_countdown_title(),
+                            self.friction_final_title(action),
                             Style::default()
                                 .fg(Color::Rgb(241, 203, 126))
                                 .add_modifier(Modifier::BOLD),
@@ -817,11 +861,9 @@ impl Dashboard {
 
     fn attempts_day_line(&self, day: &DayAttempts) -> Line<'static> {
         let label = self.short_weekday(day.date.weekday());
-        let filled = if day.initiated == 0 {
-            0
-        } else {
-            ((day.resisted * 6) + (day.initiated / 2)) / day.initiated
-        };
+        let filled = ((day.resisted * 6) + (day.initiated / 2))
+            .checked_div(day.initiated)
+            .unwrap_or(0);
         let empty = 6_u32.saturating_sub(filled);
         let bar = format!(
             "{}{}",

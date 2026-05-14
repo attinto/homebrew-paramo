@@ -20,7 +20,8 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use config::{SiteMutation, SystemConfig};
 use i18n::{I18n, Language};
 use preferences::UserPreferences;
-use std::io::IsTerminal;
+use std::io::{BufRead, IsTerminal, Write};
+use std::time::{Duration, Instant};
 
 #[derive(Parser)]
 #[command(name = "paramo")]
@@ -163,17 +164,7 @@ fn main() -> Result<()> {
                 }
             }
             SiteCommand::Remove { site } => {
-                match config.remove_site(&site).map_err(anyhow::Error::msg)? {
-                    SiteMutation::Removed(site) => {
-                        config.save_active()?;
-                        ipc::send_command("sync").map_err(anyhow::Error::msg)?;
-                        println!("{}", i18n.site_removed(&site));
-                    }
-                    SiteMutation::NotFound(site) => {
-                        println!("{}", i18n.site_not_found(&site));
-                    }
-                    _ => {}
-                }
+                cli_remove_site_with_friction(&mut config, &site, i18n)?;
             }
         },
         Some(Command::Schedule(command)) => match command {
@@ -246,4 +237,91 @@ fn require_root(i18n: I18n) -> Result<()> {
     }
 
     Ok(())
+}
+
+// Quitar un sitio desde el CLI replica el mismo proceso de fricción que la
+// TUI (30 s + motivo obligatorio + 60 s) para que no haya un atajo trivial
+// que sortee la protección.
+fn cli_remove_site_with_friction(
+    config: &mut SystemConfig,
+    raw_site: &str,
+    i18n: I18n,
+) -> Result<()> {
+    if !std::io::stdin().is_terminal() {
+        anyhow::bail!("{}", i18n.t("site_remove_requires_tty"));
+    }
+
+    // Validamos antes de empezar la espera: si el sitio no está en la lista,
+    // no tiene sentido hacer al usuario esperar 90 segundos.
+    let normalized = config::normalize_site_input(raw_site).map_err(anyhow::Error::msg)?;
+    if !config
+        .sites
+        .list
+        .iter()
+        .any(|existing| config::normalize_site_input(existing).ok().as_deref() == Some(&normalized))
+    {
+        println!("{}", i18n.site_not_found(&normalized));
+        return Ok(());
+    }
+
+    println!("{}", i18n.format("site_remove_initiated", &[&normalized]));
+
+    println!("{}", i18n.t("site_remove_phase_first"));
+    cli_countdown(30)?;
+
+    let reason = cli_prompt_reason(i18n)?;
+
+    println!("{}", i18n.t("site_remove_phase_final"));
+    cli_countdown(60)?;
+
+    match config.remove_site(&normalized).map_err(anyhow::Error::msg)? {
+        SiteMutation::Removed(site) => {
+            config.save_active()?;
+            let _ = journal::append_site_removal(&site, &reason);
+            // El daemon puede no estar arrancado en entornos de desarrollo;
+            // si no responde, lo informamos pero no abortamos.
+            if let Err(error) = ipc::send_command("sync") {
+                eprintln!("{}", error);
+            }
+            println!(
+                "{}",
+                i18n.format("site_remove_completed", &[&site, &reason])
+            );
+        }
+        SiteMutation::NotFound(site) => println!("{}", i18n.site_not_found(&site)),
+        _ => {}
+    }
+
+    Ok(())
+}
+
+fn cli_countdown(seconds: u64) -> Result<()> {
+    let mut stdout = std::io::stdout();
+    let start = Instant::now();
+    let total = Duration::from_secs(seconds);
+    while start.elapsed() < total {
+        let elapsed = start.elapsed().as_secs();
+        let remaining = seconds.saturating_sub(elapsed);
+        write!(stdout, "\r  {:>3}s ", remaining)?;
+        stdout.flush()?;
+        std::thread::sleep(Duration::from_millis(1000));
+    }
+    writeln!(stdout, "\r  {:>3}s ", 0)?;
+    stdout.flush()?;
+    Ok(())
+}
+
+fn cli_prompt_reason(i18n: I18n) -> Result<String> {
+    let stdin = std::io::stdin();
+    let mut handle = stdin.lock();
+    loop {
+        println!("{}", i18n.t("site_remove_phase_reason"));
+        let mut line = String::new();
+        handle.read_line(&mut line)?;
+        let trimmed = line.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+        println!("{}", i18n.reason_required());
+    }
 }

@@ -1,7 +1,7 @@
 use crate::blocker::{self, SyncAction};
 use crate::config::SystemConfig;
 use crate::hosts;
-use crate::i18n::{I18n, Language};
+use crate::i18n::I18n;
 use crate::launchd;
 use crate::paths;
 use anyhow::{Context, Result};
@@ -21,10 +21,7 @@ pub fn install(config: &SystemConfig, i18n: I18n) -> Result<InstallSummary> {
 
     let binary_path = resolve_binary_path()?;
     fs::create_dir_all(paths::system_config_dir()).context("failed to create support dir")?;
-    lines.push(match i18n.language() {
-        Language::Es => format!("Directorio de soporte listo: {}", paths::APP_SUPPORT_DIR),
-        Language::En => format!("Support directory ready: {}", paths::APP_SUPPORT_DIR),
-    });
+    lines.push(i18n.format("install_support_dir_ready", &[paths::APP_SUPPORT_DIR]));
 
     lines.push(config_install_message(
         migrate_or_create_config(config)?,
@@ -39,10 +36,7 @@ pub fn install(config: &SystemConfig, i18n: I18n) -> Result<InstallSummary> {
     lines.push(sync_action_message(sync_action, i18n));
 
     write_plist(&binary_path)?;
-    lines.push(match i18n.language() {
-        Language::Es => format!("LaunchDaemon actualizado: {}", paths::PLIST_DEST),
-        Language::En => format!("LaunchDaemon updated: {}", paths::PLIST_DEST),
-    });
+    lines.push(i18n.format("install_launchd_updated", &[paths::PLIST_DEST]));
 
     bootstrap_launchd()?;
     let status = launchd::query_service(paths::LAUNCHD_LABEL)?;
@@ -52,21 +46,12 @@ pub fn install(config: &SystemConfig, i18n: I18n) -> Result<InstallSummary> {
     lines.push(launchd_status_message(&status, i18n));
 
     lines.push(if binary_path == Path::new(paths::MANUAL_BINARY_DEST) {
-        match i18n.language() {
-            Language::Es => format!("Binario copiado a {}", paths::MANUAL_BINARY_DEST),
-            Language::En => format!("Binary copied to {}", paths::MANUAL_BINARY_DEST),
-        }
+        i18n.format("install_binary_copied", &[paths::MANUAL_BINARY_DEST])
     } else {
-        match i18n.language() {
-            Language::Es => format!(
-                "Se usará el binario ya instalado en {}",
-                binary_path.display()
-            ),
-            Language::En => format!(
-                "Using the existing installed binary at {}",
-                binary_path.display()
-            ),
-        }
+        i18n.format(
+            "install_binary_using_existing",
+            &[&binary_path.display().to_string()],
+        )
     });
 
     lines.push(i18n.install_completed().to_string());
@@ -77,40 +62,25 @@ pub fn uninstall(i18n: I18n) -> Result<InstallSummary> {
     let mut lines = vec![i18n.uninstall_started().to_string()];
 
     if remove_managed_hosts_block()? {
-        lines.push(match i18n.language() {
-            Language::Es => "Bloque de PARAMO retirado de /etc/hosts.".to_string(),
-            Language::En => "Removed the PARAMO block from /etc/hosts.".to_string(),
-        });
+        lines.push(i18n.t("uninstall_hosts_block_removed").to_string());
     }
 
     let unloaded = launchd::bootout_service(paths::LAUNCHD_LABEL)?;
     let plist_path = Path::new(paths::PLIST_DEST);
     if plist_path.exists() {
         fs::remove_file(plist_path).context("failed to remove plist")?;
-        lines.push(match i18n.language() {
-            Language::Es => "LaunchDaemon eliminado.".to_string(),
-            Language::En => "LaunchDaemon removed.".to_string(),
-        });
+        lines.push(i18n.t("uninstall_launchd_removed").to_string());
     } else if unloaded {
-        lines.push(match i18n.language() {
-            Language::Es => "Servicio de launchd descargado.".to_string(),
-            Language::En => "launchd service unloaded.".to_string(),
-        });
+        lines.push(i18n.t("uninstall_launchd_unloaded").to_string());
     }
 
     let manual_binary = Path::new(paths::MANUAL_BINARY_DEST);
     if manual_binary.exists() && !manual_binary.is_symlink() {
         fs::remove_file(manual_binary).context("failed to remove manual binary")?;
-        lines.push(match i18n.language() {
-            Language::Es => format!("Binario manual eliminado: {}", paths::MANUAL_BINARY_DEST),
-            Language::En => format!("Manual binary removed: {}", paths::MANUAL_BINARY_DEST),
-        });
+        lines.push(i18n.format("uninstall_binary_removed", &[paths::MANUAL_BINARY_DEST]));
     }
 
-    lines.push(match i18n.language() {
-        Language::Es => "La configuración en /etc/paramo se conserva.".to_string(),
-        Language::En => "Configuration in /etc/paramo was preserved.".to_string(),
-    });
+    lines.push(i18n.t("uninstall_config_preserved").to_string());
     lines.push(i18n.uninstall_completed().to_string());
 
     Ok(InstallSummary { lines })
@@ -179,61 +149,28 @@ fn migrate_or_create_config(config: &SystemConfig) -> Result<ConfigInstallAction
 }
 
 fn config_install_message(action: ConfigInstallAction, i18n: I18n) -> String {
-    match (action, i18n.language()) {
-        (ConfigInstallAction::Preserved, Language::Es) => format!(
-            "Configuración activa validada y normalizada: {}",
-            paths::SYSTEM_CONFIG_FILE
-        ),
-        (ConfigInstallAction::Preserved, Language::En) => format!(
-            "Validated and normalized the active configuration: {}",
-            paths::SYSTEM_CONFIG_FILE
-        ),
-        (ConfigInstallAction::Migrated, Language::Es) => format!(
-            "Configuración migrada desde {} a {}",
-            paths::LEGACY_SYSTEM_CONFIG_FILE,
-            paths::SYSTEM_CONFIG_FILE
-        ),
-        (ConfigInstallAction::Migrated, Language::En) => format!(
-            "Migrated the configuration from {} to {}",
-            paths::LEGACY_SYSTEM_CONFIG_FILE,
-            paths::SYSTEM_CONFIG_FILE
-        ),
-        (ConfigInstallAction::Created, Language::Es) => {
-            format!("Configuración creada en {}", paths::SYSTEM_CONFIG_FILE)
+    match action {
+        ConfigInstallAction::Preserved => {
+            i18n.format("install_config_preserved", &[paths::SYSTEM_CONFIG_FILE])
         }
-        (ConfigInstallAction::Created, Language::En) => {
-            format!("Configuration created at {}", paths::SYSTEM_CONFIG_FILE)
+        ConfigInstallAction::Migrated => i18n.format(
+            "install_config_migrated",
+            &[paths::LEGACY_SYSTEM_CONFIG_FILE, paths::SYSTEM_CONFIG_FILE],
+        ),
+        ConfigInstallAction::Created => {
+            i18n.format("install_config_created", &[paths::SYSTEM_CONFIG_FILE])
         }
     }
 }
 
 fn sync_action_message(action: SyncAction, i18n: I18n) -> String {
-    match (action, i18n.language()) {
-        (SyncAction::Blocked, Language::Es) => {
-            "Bloqueo inicial sincronizado con /etc/hosts.".to_string()
-        }
-        (SyncAction::Blocked, Language::En) => {
-            "Initial blocking state synchronized with /etc/hosts.".to_string()
-        }
-        (SyncAction::Unblocked, Language::Es) => {
-            "Se limpió el bloque gestionado en /etc/hosts.".to_string()
-        }
-        (SyncAction::Unblocked, Language::En) => {
-            "Cleared the managed block from /etc/hosts.".to_string()
-        }
-        (SyncAction::Updated, Language::Es) => {
-            "Bloque de hosts actualizado para reflejar la configuración actual.".to_string()
-        }
-        (SyncAction::Updated, Language::En) => {
-            "Updated the hosts block to match the current configuration.".to_string()
-        }
-        (SyncAction::AlreadyCorrect(_), Language::Es) => {
-            "El estado de /etc/hosts ya coincidía con la configuración.".to_string()
-        }
-        (SyncAction::AlreadyCorrect(_), Language::En) => {
-            "The /etc/hosts state already matched the configuration.".to_string()
-        }
-    }
+    let key = match action {
+        SyncAction::Blocked => "install_sync_blocked",
+        SyncAction::Unblocked => "install_sync_unblocked",
+        SyncAction::Updated => "install_sync_updated",
+        SyncAction::AlreadyCorrect(_) => "install_sync_already_correct",
+    };
+    i18n.t(key).to_string()
 }
 
 fn write_plist(binary_path: &Path) -> Result<()> {
@@ -291,25 +228,13 @@ fn cleanup_legacy_installation(i18n: I18n) -> Result<Vec<String>> {
     let mut lines = Vec::new();
 
     if launchd::bootout_service(paths::LEGACY_LAUNCHD_LABEL)? {
-        lines.push(match i18n.language() {
-            Language::Es => "Servicio legacy de Undistracted descargado.".to_string(),
-            Language::En => "Unloaded the legacy Undistracted service.".to_string(),
-        });
+        lines.push(i18n.t("install_legacy_unloaded").to_string());
     }
 
     let legacy_plist = Path::new(paths::LEGACY_PLIST_DEST);
     if legacy_plist.exists() {
         fs::remove_file(legacy_plist).context("failed to remove legacy plist")?;
-        lines.push(match i18n.language() {
-            Language::Es => format!(
-                "LaunchDaemon legacy eliminado: {}",
-                paths::LEGACY_PLIST_DEST
-            ),
-            Language::En => format!(
-                "Removed the legacy LaunchDaemon: {}",
-                paths::LEGACY_PLIST_DEST
-            ),
-        });
+        lines.push(i18n.format("install_legacy_plist_removed", &[paths::LEGACY_PLIST_DEST]));
     }
 
     Ok(lines)
@@ -319,24 +244,13 @@ fn launchd_status_message(status: &launchd::ServiceStatus, i18n: I18n) -> String
     let pid_suffix = status
         .pid
         .as_deref()
-        .map(|pid| match i18n.language() {
-            Language::Es => format!(" (pid {pid})"),
-            Language::En => format!(" (pid {pid})"),
-        })
+        .map(|pid| i18n.format("install_pid_suffix", &[pid]))
         .unwrap_or_default();
 
-    match i18n.language() {
-        Language::Es => format!(
-            "Daemon verificado en launchd: {}{}",
-            paths::LAUNCHD_LABEL,
-            pid_suffix
-        ),
-        Language::En => format!(
-            "Verified the daemon in launchd: {}{}",
-            paths::LAUNCHD_LABEL,
-            pid_suffix
-        ),
-    }
+    i18n.format(
+        "install_launchd_verified",
+        &[paths::LAUNCHD_LABEL, &pid_suffix],
+    )
 }
 
 fn remove_managed_hosts_block() -> Result<bool> {
@@ -358,6 +272,7 @@ fn remove_managed_hosts_block() -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::i18n::Language;
 
     #[test]
     fn test_sync_action_message_is_stable() {

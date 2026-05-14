@@ -49,5 +49,5 @@ file = "/var/log/paramo.log"
 level = "info"
 
 [daemon]
-# Intervalo del daemon en segundos
-interval_seconds = 60
+# Intervalo del daemon en segundos (cada cuánto re-evalúa el horario y resincroniza /etc/hosts)
+interval_seconds = 1200

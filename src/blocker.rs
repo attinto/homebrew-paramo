@@ -34,10 +34,9 @@ pub struct StatusSnapshot {
 
 pub fn run_daemon(config: &SystemConfig) -> Result<()> {
     crate::ipc::listen()?;
+    // No incrementamos la racha al arrancar el daemon: solo cuando observamos
+    // un cambio de día en marcha. Reiniciar a las 10:00 no debe acreditar el día.
     let mut last_streak_day = Local::now().date_naive();
-    if let Err(error) = streak::record_clean_day() {
-        eprintln!("Failed to record clean day: {error}");
-    }
 
     loop {
         let today = Local::now().date_naive();

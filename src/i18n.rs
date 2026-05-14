@@ -61,14 +61,10 @@ impl I18n {
         Self { language }
     }
 
-    pub fn language(self) -> Language {
-        self.language
-    }
-
     // Devuelve la cadena estática para la clave dada en el idioma activo.
     // Si la clave no existe, devuelve "???" — esto no debería ocurrir nunca
     // siempre que los archivos locales estén completos.
-    fn t(self, key: &str) -> &'static str {
+    pub(crate) fn t(self, key: &str) -> &'static str {
         let table = match self.language {
             Language::Es => &translations()[0],
             Language::En => &translations()[1],
@@ -77,7 +73,7 @@ impl I18n {
     }
 
     // Sustituye los marcadores {0}, {1}, {2} de una plantilla de traducción.
-    fn format(self, key: &str, args: &[&str]) -> String {
+    pub(crate) fn format(self, key: &str, args: &[&str]) -> String {
         let mut result = self.t(key).to_string();
         for (i, arg) in args.iter().enumerate() {
             result = result.replace(&format!("{{{}}}", i), arg);

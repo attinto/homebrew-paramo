@@ -123,12 +123,14 @@ fn domain_aliases(domain: &str) -> BTreeSet<String> {
 
     aliases.insert(normalized.clone());
 
-    if normalized.contains('.') {
-        if let Some(stripped) = normalized.strip_prefix("www.") {
-            aliases.insert(stripped.to_string());
-        } else {
-            aliases.insert(format!("www.{}", normalized));
-        }
+    // Solo añadimos `www.X` cuando X es un dominio raíz (un único punto).
+    // Para subdominios como `m.tiktok.com` no inventamos `www.m.tiktok.com`,
+    // que casi nunca existe y solo ensucia /etc/hosts.
+    let dot_count = normalized.matches('.').count();
+    if let Some(stripped) = normalized.strip_prefix("www.") {
+        aliases.insert(stripped.to_string());
+    } else if dot_count == 1 {
+        aliases.insert(format!("www.{}", normalized));
     }
 
     if is_youtube_domain(&normalized) {
@@ -208,6 +210,17 @@ mod tests {
 
         assert!(is_blocked(content_blocked, marker));
         assert!(!is_blocked(content_not_blocked, marker));
+    }
+
+    #[test]
+    fn test_subdomain_does_not_get_www_prefix() {
+        let marker = "# --- TEST ---";
+        let domains = vec!["m.tiktok.com".to_string()];
+        let ips = vec!["127.0.0.1".to_string()];
+
+        let result = build_block_section(marker, &domains, &ips);
+        assert!(result.contains("127.0.0.1 m.tiktok.com"));
+        assert!(!result.contains("www.m.tiktok.com"));
     }
 
     #[test]

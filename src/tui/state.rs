@@ -10,11 +10,46 @@ use anyhow::Result;
 use ratatui::widgets::ListState;
 use std::time::Instant;
 
+// Acción que está pendiente detrás de un flujo de fricción.
+// Cada variante implica el mismo proceso (30s + motivo + 60s) pero el
+// mensaje y el efecto final cambian.
+#[derive(Debug, Clone)]
+pub(crate) enum FrictionAction {
+    Unblock,
+    RemoveSite(String),
+}
+
 #[derive(Debug)]
-pub(crate) enum UnblockFlow {
-    Countdown { started: Instant },
-    ReasonPrompt { value: String },
-    FinalCountdown { started: Instant, reason: String },
+pub(crate) enum FrictionFlow {
+    Countdown {
+        action: FrictionAction,
+        started: Instant,
+    },
+    ReasonPrompt {
+        action: FrictionAction,
+        value: String,
+    },
+    FinalCountdown {
+        action: FrictionAction,
+        started: Instant,
+        reason: String,
+    },
+}
+
+impl FrictionFlow {
+    pub(crate) fn action(&self) -> &FrictionAction {
+        match self {
+            Self::Countdown { action, .. }
+            | Self::ReasonPrompt { action, .. }
+            | Self::FinalCountdown { action, .. } => action,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PendingFriction {
+    pub(crate) action: FrictionAction,
+    pub(crate) reason: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -83,8 +118,8 @@ pub(crate) struct Dashboard {
     pub(crate) schedule_cursor: usize,
     pub(crate) flash_message: Option<String>,
     pub(crate) prompt: Option<PromptState>,
-    pub(crate) unblock_flow: Option<UnblockFlow>,
-    pub(crate) pending_unblock: Option<String>,
+    pub(crate) friction_flow: Option<FrictionFlow>,
+    pub(crate) pending_action: Option<PendingFriction>,
     pub(crate) streak: StreakState,
     pub(crate) attempts_today: DayAttempts,
     pub(crate) attempts_last_7_days: Vec<DayAttempts>,
@@ -119,8 +154,8 @@ impl Dashboard {
             schedule_cursor: 0,
             flash_message: None,
             prompt: None,
-            unblock_flow: None,
-            pending_unblock: None,
+            friction_flow: None,
+            pending_action: None,
             streak: streak::load().unwrap_or_default(),
             attempts_today: attempts::today().unwrap_or_default(),
             attempts_last_7_days: attempts::last_n_days(7).unwrap_or_default(),
@@ -214,30 +249,35 @@ impl Dashboard {
         self.diagnostics_state.select(Some(next));
     }
 
-    // Advances unblock flow state machine on each render tick.
-    // Countdown (30s) → ReasonPrompt → FinalCountdown (60s) → pending_unblock
-    pub(crate) fn advance_unblock_flow(&mut self) {
-        let to_reason = match &self.unblock_flow {
-            Some(UnblockFlow::Countdown { started }) => started.elapsed().as_secs() >= 30,
+    // Avanza la máquina de estados de fricción en cada tick de render.
+    // Countdown (30s) → ReasonPrompt → FinalCountdown (60s) → pending_action
+    pub(crate) fn advance_friction_flow(&mut self) {
+        let to_reason = match &self.friction_flow {
+            Some(FrictionFlow::Countdown { started, .. }) => started.elapsed().as_secs() >= 30,
             _ => false,
         };
         if to_reason {
-            self.unblock_flow = Some(UnblockFlow::ReasonPrompt {
-                value: String::new(),
-            });
+            if let Some(FrictionFlow::Countdown { action, .. }) = self.friction_flow.take() {
+                self.friction_flow = Some(FrictionFlow::ReasonPrompt {
+                    action,
+                    value: String::new(),
+                });
+            }
             return;
         }
 
-        let final_done = match &self.unblock_flow {
-            Some(UnblockFlow::FinalCountdown { started, .. }) => started.elapsed().as_secs() >= 60,
+        let final_done = match &self.friction_flow {
+            Some(FrictionFlow::FinalCountdown { started, .. }) => {
+                started.elapsed().as_secs() >= 60
+            }
             _ => false,
         };
         if final_done {
-            let reason = match self.unblock_flow.take() {
-                Some(UnblockFlow::FinalCountdown { reason, .. }) => reason,
-                _ => String::new(),
-            };
-            self.pending_unblock = Some(reason);
+            if let Some(FrictionFlow::FinalCountdown { action, reason, .. }) =
+                self.friction_flow.take()
+            {
+                self.pending_action = Some(PendingFriction { action, reason });
+            }
         }
     }
 }
