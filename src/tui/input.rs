@@ -1,7 +1,8 @@
 use super::helpers::wrap_hour;
-use super::state::{Dashboard, FrictionAction, FrictionFlow, PromptState, TabId};
+use super::state::{Dashboard, FrictionAction, FrictionFlow, HabitsInput, PromptState, TabId};
 use crate::attempts;
 use crate::config::SiteMutation;
+use crate::habits::{self, HabitFrequency};
 use crate::i18n::Language;
 use crate::ipc;
 use crate::journal;
@@ -12,6 +13,12 @@ use std::time::Instant;
 
 impl Dashboard {
     pub(crate) fn handle_key(&mut self, key: KeyEvent) -> Result<bool> {
+        // HabitsInput must intercept before global keys so 'q' doesn't quit while typing
+        if self.habits_input.is_some() {
+            self.handle_habits_input_key(key)?;
+            return Ok(false);
+        }
+
         if self.friction_flow.is_some() {
             return self.handle_friction_flow_key(key);
         }
@@ -101,6 +108,7 @@ impl Dashboard {
             TabId::Diagnostics => self.handle_diagnostics_key(key)?,
             TabId::Attempts => {}
             TabId::Streak => {}
+            TabId::Habits => self.handle_habits_key(key)?,
             TabId::Wall => self.handle_wall_key(key),
             TabId::Exit => {
                 if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) {
@@ -382,6 +390,157 @@ impl Dashboard {
         self.i18n = crate::i18n::I18n::new(self.prefs.language);
         self.set_flash(self.i18n.language_updated(self.prefs.language));
         self.refresh_diagnostics()?;
+        Ok(())
+    }
+
+    fn handle_habits_key(&mut self, key: KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Down => self.select_next_habit(),
+            KeyCode::Up => self.select_previous_habit(),
+            KeyCode::Enter => self.toggle_selected_habit()?,
+            KeyCode::Char('a') => {
+                self.habits_input = Some(HabitsInput::EnteringName {
+                    value: String::new(),
+                });
+            }
+            KeyCode::Char('d') => {
+                if let Some(index) = self.habits_state.selected() {
+                    if index < self.habits.habits.len() {
+                        self.habits_input = Some(HabitsInput::ConfirmDelete { index });
+                    }
+                } else {
+                    self.set_flash(self.i18n.habits_none_to_delete());
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn handle_habits_input_key(&mut self, key: KeyEvent) -> Result<()> {
+        // Clone to snapshot state so we can mutably borrow self in the arms
+        let input = self.habits_input.clone();
+        match input {
+            Some(HabitsInput::EnteringName { ref value }) => match key.code {
+                KeyCode::Esc => {
+                    self.habits_input = None;
+                }
+                KeyCode::Enter => {
+                    let name = value.trim().to_string();
+                    if !name.is_empty() {
+                        self.habits_input = Some(HabitsInput::SelectingFrequency {
+                            name,
+                            selected: 0,
+                        });
+                    }
+                }
+                KeyCode::Backspace => {
+                    if let Some(HabitsInput::EnteringName { value }) = &mut self.habits_input {
+                        value.pop();
+                    }
+                }
+                KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    if let Some(HabitsInput::EnteringName { value }) = &mut self.habits_input {
+                        value.push(ch);
+                    }
+                }
+                _ => {}
+            },
+            Some(HabitsInput::SelectingFrequency {
+                ref name,
+                selected,
+            }) => {
+                let name = name.clone();
+                match key.code {
+                    KeyCode::Esc => {
+                        self.habits_input = None;
+                    }
+                    KeyCode::Down => {
+                        if let Some(HabitsInput::SelectingFrequency { selected, .. }) =
+                            &mut self.habits_input
+                        {
+                            *selected = (*selected + 1) % 4;
+                        }
+                    }
+                    KeyCode::Up => {
+                        if let Some(HabitsInput::SelectingFrequency { selected, .. }) =
+                            &mut self.habits_input
+                        {
+                            *selected = (*selected + 3) % 4;
+                        }
+                    }
+                    KeyCode::Char('1') => self.confirm_habit_add(&name, HabitFrequency::Daily)?,
+                    KeyCode::Char('2') => self.confirm_habit_add(&name, HabitFrequency::Weekly)?,
+                    KeyCode::Char('3') => self.confirm_habit_add(&name, HabitFrequency::Monthly)?,
+                    KeyCode::Char('4') => {
+                        self.confirm_habit_add(&name, HabitFrequency::Weekdays)?
+                    }
+                    KeyCode::Enter => {
+                        let freq = match selected {
+                            0 => HabitFrequency::Daily,
+                            1 => HabitFrequency::Weekly,
+                            2 => HabitFrequency::Monthly,
+                            _ => HabitFrequency::Weekdays,
+                        };
+                        self.confirm_habit_add(&name, freq)?;
+                    }
+                    _ => {}
+                }
+            }
+            Some(HabitsInput::ConfirmDelete { index }) => match key.code {
+                KeyCode::Esc => {
+                    self.habits_input = None;
+                }
+                KeyCode::Enter => {
+                    if index < self.habits.habits.len() {
+                        self.habits.habits.remove(index);
+                        if let Err(e) = habits::save(&self.habits) {
+                            self.set_flash(e.to_string());
+                        } else {
+                            self.set_flash(self.i18n.habits_removed());
+                        }
+                        let new_len = self.habits.habits.len();
+                        if new_len == 0 {
+                            self.habits_state.select(None);
+                        } else {
+                            self.habits_state.select(Some(index.min(new_len - 1)));
+                        }
+                    }
+                    self.habits_input = None;
+                }
+                _ => {}
+            },
+            None => {}
+        }
+        Ok(())
+    }
+
+    fn toggle_selected_habit(&mut self) -> Result<()> {
+        let Some(index) = self.habits_state.selected() else {
+            return Ok(());
+        };
+        let Some(habit) = self.habits.habits.get_mut(index) else {
+            return Ok(());
+        };
+        habits::toggle_completion(habit);
+        if let Err(e) = habits::save(&self.habits) {
+            self.set_flash(e.to_string());
+        }
+        Ok(())
+    }
+
+    fn confirm_habit_add(&mut self, name: &str, frequency: HabitFrequency) -> Result<()> {
+        let habit = habits::new_habit(name.to_string(), frequency);
+        self.habits.habits.push(habit);
+        let new_idx = self.habits.habits.len() - 1;
+        self.habits_state.select(Some(new_idx));
+        if let Err(e) = habits::save(&self.habits) {
+            self.set_flash(e.to_string());
+        } else {
+            let flash = self.i18n.habits_added(name);
+            self.set_flash(flash);
+        }
+        self.habits_input = None;
         Ok(())
     }
 }
