@@ -7,6 +7,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.1.4] — 2026-05-14
+
 ### Added
 - **Habits tab**: new TUI tab (between Streak and Wall) for tracking personal habits. Each habit has a name and frequency (daily, weekly, monthly, or weekdays-only). Users can mark habits as done per period, see per-habit streak and best-streak, a 14-period history bar (█/░), and a daily progress strip showing X/N habits completed today. Data persists locally in `~/.config/paramo/habits.json`.
 - Streak system (`racha`): tracks consecutive clean days without unblocking during schedule
