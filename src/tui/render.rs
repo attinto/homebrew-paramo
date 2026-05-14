@@ -1050,11 +1050,7 @@ impl Dashboard {
             .count();
 
         let bar_width: usize = 20;
-        let filled = if due_count > 0 {
-            (done_count * bar_width) / due_count
-        } else {
-            0
-        };
+        let filled = (done_count * bar_width).checked_div(due_count).unwrap_or(0);
         let empty = bar_width - filled;
         let bar = format!("{}{}", "█".repeat(filled), "░".repeat(empty));
 
