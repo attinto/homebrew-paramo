@@ -2,6 +2,7 @@ use crate::attempts::{self, DayAttempts};
 use crate::blocker::{self, StatusSnapshot};
 use crate::config::SystemConfig;
 use crate::doctor::{self, Diagnostic};
+use crate::habits::{self, HabitsLog};
 use crate::i18n::I18n;
 use crate::journal;
 use crate::preferences::UserPreferences;
@@ -61,12 +62,13 @@ pub(crate) enum TabId {
     Diagnostics,
     Attempts,
     Streak,
+    Habits,
     Wall,
     Exit,
 }
 
 impl TabId {
-    pub(crate) fn all() -> [Self; 9] {
+    pub(crate) fn all() -> [Self; 10] {
         [
             Self::Home,
             Self::Sites,
@@ -75,6 +77,7 @@ impl TabId {
             Self::Diagnostics,
             Self::Attempts,
             Self::Streak,
+            Self::Habits,
             Self::Wall,
             Self::Exit,
         ]
@@ -89,8 +92,9 @@ impl TabId {
             Self::Diagnostics => 4,
             Self::Attempts => 5,
             Self::Streak => 6,
-            Self::Wall => 7,
-            Self::Exit => 8,
+            Self::Habits => 7,
+            Self::Wall => 8,
+            Self::Exit => 9,
         }
     }
 
@@ -103,6 +107,13 @@ impl TabId {
 pub(crate) struct PromptState {
     pub(crate) title: String,
     pub(crate) value: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum HabitsInput {
+    EnteringName { value: String },
+    SelectingFrequency { name: String, selected: usize },
+    ConfirmDelete { index: usize },
 }
 
 #[derive(Debug)]
@@ -125,6 +136,9 @@ pub(crate) struct Dashboard {
     pub(crate) attempts_last_7_days: Vec<DayAttempts>,
     pub(crate) wall_entries: Vec<journal::JournalEntry>,
     pub(crate) wall_state: ListState,
+    pub(crate) habits: HabitsLog,
+    pub(crate) habits_state: ListState,
+    pub(crate) habits_input: Option<HabitsInput>,
 }
 
 impl Dashboard {
@@ -140,6 +154,12 @@ impl Dashboard {
         }
         if !diagnostics.is_empty() {
             diagnostics_state.select(Some(0));
+        }
+
+        let habits = habits::load().unwrap_or_default();
+        let mut habits_state = ListState::default();
+        if !habits.habits.is_empty() {
+            habits_state.select(Some(0));
         }
 
         Ok(Self {
@@ -161,6 +181,9 @@ impl Dashboard {
             attempts_last_7_days: attempts::last_n_days(7).unwrap_or_default(),
             wall_entries: journal::load().unwrap_or_default(),
             wall_state: ListState::default(),
+            habits,
+            habits_state,
+            habits_input: None,
         })
     }
 
@@ -247,6 +270,31 @@ impl Dashboard {
             None => 0,
         };
         self.diagnostics_state.select(Some(next));
+    }
+
+    pub(crate) fn select_next_habit(&mut self) {
+        if self.habits.habits.is_empty() {
+            self.habits_state.select(None);
+            return;
+        }
+        let next = match self.habits_state.selected() {
+            Some(i) => (i + 1) % self.habits.habits.len(),
+            None => 0,
+        };
+        self.habits_state.select(Some(next));
+    }
+
+    pub(crate) fn select_previous_habit(&mut self) {
+        if self.habits.habits.is_empty() {
+            self.habits_state.select(None);
+            return;
+        }
+        let len = self.habits.habits.len();
+        let next = match self.habits_state.selected() {
+            Some(i) => (i + len - 1) % len,
+            None => 0,
+        };
+        self.habits_state.select(Some(next));
     }
 
     // Avanza la máquina de estados de fricción en cada tick de render.
